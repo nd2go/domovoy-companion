@@ -65,3 +65,6 @@ tests/label_print/
 
 # Antigravity
 .gemini/
+
+# CI test reports
+/reports/

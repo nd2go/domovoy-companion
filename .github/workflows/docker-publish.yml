@@ -17,6 +17,8 @@ env:
 
 jobs:
   build-and-push:
+    # Publishing is maintained by upstream; the Domovoy fork runs validation only.
+    if: github.repository == 'Duelion/homebox-companion'
     runs-on: ubuntu-latest
     permissions:
       contents: read
