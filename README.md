@@ -21,6 +21,8 @@ AI-powered companion for [Homebox](https://github.com/sysadminsmedia/homebox) in
 Take a photo of your stuff, and let AI identify and catalog items directly into your Homebox instance. Perfect for quickly inventorying a room, shelf, or collection.
 Use the **AI Chat** to manage your inventory, find locations, or update details just by asking.
 
+Fork development checks and merge rules: [CI guide](docs/CI.md).
+
 ## 🔄 How It Works
 
 ```mermaid

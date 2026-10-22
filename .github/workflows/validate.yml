@@ -1,9 +1,13 @@
-name: Validate
+name: CI
 
 on:
   pull_request:
   push:
-    branches: [dev]
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -11,10 +15,12 @@ permissions:
 jobs:
   python:
     name: Python checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: "3.14"
@@ -25,7 +31,7 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --all-groups
       - name: Run pytest
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest --junitxml=reports/python.xml
       - name: Run Ruff
         run: uv run --no-sync ruff check .
       - name: Run ty
@@ -33,15 +39,26 @@ jobs:
       - name: Run Vulture
         run: uv run --no-sync vulture --min-confidence 70 --sort-by-size
 
+      - name: Keep Python failure report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: python-failure-report
+          path: reports/python.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
   frontend:
     name: Frontend checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
         with:
           node-version: "22"
@@ -60,17 +77,32 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
       - name: Run mocked browser tests
-        run: npm run test:browser
+        run: npm run test:browser -- --reporter=line,html
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+
+      - name: Keep browser failure reports
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: browser-failure-reports
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   homebox-live:
     name: Homebox live checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       HBC_LLM_API_KEY: ci-sentinel-no-network
       HBC_LLM_MODEL: gpt-5-mini
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
           python-version: "3.14"
@@ -82,10 +114,39 @@ jobs:
         run: uv sync --locked --all-groups
       - name: Run disposable Homebox tests
         run: >-
-          uv run --no-sync pytest -m live
+          uv run --no-sync pytest -m live --junitxml=reports/homebox-live.xml
           tests/test_homebox_client.py
           tests/test_homebox_auth_live.py
           tests/test_homebox_upstream_live.py
           tests/test_companion_auth_live.py
           tests/test_label_print_live.py
           tests/test_mcp_tools.py
+
+      - name: Keep Homebox failure report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: homebox-failure-report
+          path: reports/homebox-live.xml
+          if-no-files-found: ignore
+          retention-days: 7
+
+  required:
+    name: Required
+    if: ${{ always() }}
+    needs: [python, frontend, homebox-live]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Report required checks
+        env:
+          PYTHON_RESULT: ${{ needs.python.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          HOMEBOX_RESULT: ${{ needs['homebox-live'].result }}
+        run: |
+          printf '## CI results\n\n| Check | Result |\n| --- | --- |\n| Python checks | %s |\n| Frontend checks | %s |\n| Homebox live checks | %s |\n\n' "$PYTHON_RESULT" "$FRONTEND_RESULT" "$HOMEBOX_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf '[Run logs and artifacts](%s/%s/actions/runs/%s)\n' "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$PYTHON_RESULT" != success ] || [ "$FRONTEND_RESULT" != success ] || [ "$HOMEBOX_RESULT" != success ]; then
+            echo "::error::Required checks must succeed; Python=$PYTHON_RESULT, Frontend=$FRONTEND_RESULT, Homebox=$HOMEBOX_RESULT"
+            exit 1
+          fi
