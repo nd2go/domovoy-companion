@@ -8,15 +8,16 @@ Choice labels can change while their stored IDs stay fixed. The optional `option
 
 ## Executed verification
 
-The complete browser suite passed: 44 tests, including all 34 existing tests.
+The complete browser suite passed: 46 tests, including all 34 existing tests.
 New checks cover category creation, shared blocks, revision conflicts, typed submission and unit conversion.
-They also cover local versus template properties, invalid values, draft recovery, and 393/412-pixel viewports.
+They also cover local versus template properties, invalid values, draft recovery, imports, stable labels, archives, oversized files and 393/412-pixel viewports.
+Multiple-choice values can be set back to unknown after a known empty list.
 The API is mocked in these browser tests. They do not prove real recognition or physical-device support.
 
 Svelte check and ESLint passed. The changed server's Python, Ruff, ty and Vulture checks passed.
 The schema live test passed with real disposable Homebox under session and configured API-key authentication.
 A separate headed Chrome check used the changed app and real disposable Homebox.
-It created, previewed and applied a new category. Desktop and mobile-width screenshots were inspected.
+It created, previewed and applied a new category. It also captured a synthetic image, selected a category, validated a size in a different unit and saved the item with its extra owner field. Only recognition was mocked in that flow. Desktop and mobile-width screenshots were inspected.
 No model call, physical phone, printer, published QA, or owner inventory was used.
 
 ## Review passes and corrections

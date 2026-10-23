@@ -366,3 +366,51 @@ test('late schema application cannot overwrite a newly selected collection', asy
 	await expect(editor.getByLabel('Display name')).toHaveValue('Shared tools');
 	await expect(editor.getByText('Definitions saved.', { exact: false })).toHaveCount(0);
 });
+
+test('definition import keeps IDs during rename and archive and rejects oversized files', async ({
+	page,
+}) => {
+	const model = await installApi(page);
+	await page.goto('/settings');
+	const editor = page.getByRole('region', { name: 'Categories and properties' });
+	await expect(editor.getByLabel('Display name')).toBeVisible();
+	const schema = structuredClone(seed);
+	schema.categories.tool.label = 'Renamed tools';
+	schema.blocks.battery.archived = true;
+	schema.fields.condition.option_labels = { used: 'Previously used' };
+	await editor.locator('input[type=file]').setInputFiles({
+		name: 'definitions.json',
+		mimeType: 'application/json',
+		buffer: Buffer.from(JSON.stringify(schema)),
+	});
+	await expect(editor.getByLabel('Display name')).toHaveValue('Renamed tools');
+	await editor.getByRole('button', { name: 'Preview changes' }).click();
+	await expect(editor.getByLabel('Definition changes')).toContainText('Renamed tools');
+	await editor.getByRole('button', { name: 'Apply definitions' }).click();
+	await expect(editor.getByRole('status')).toContainText('Definitions saved');
+	expect(model.schema).toEqual(schema);
+	await editor.locator('input[type=file]').setInputFiles({
+		name: 'oversized.json',
+		mimeType: 'application/json',
+		buffer: Buffer.alloc(2 * 1024 * 1024 + 1, 32),
+	});
+	await expect(editor.getByRole('alert')).toContainText('2 MiB');
+	await expect(editor.getByLabel('Display name')).toHaveValue('Renamed tools');
+	expect(model.revision).toBe(1);
+});
+
+test('multiple choice distinguishes an unknown value from a known empty list', async ({ page }) => {
+	const model = await installApi(page);
+	await openReview(page);
+	await page
+		.getByRole('combobox', { name: 'Additional property', exact: true })
+		.selectOption('applications');
+	await page.getByRole('button', { name: 'Add to this item', exact: true }).click();
+	await page.getByLabel('Applications', { exact: true }).selectOption(['wood']);
+	await page.getByLabel('Applications', { exact: true }).selectOption([]);
+	await page.getByRole('button', { name: 'Mark Applications as unknown' }).click();
+	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+	await page.getByRole('button', { name: /Submit All Items/ }).click();
+	await expect.poll(() => model.submitted.length).toBe(1);
+	expect((model.submitted[0].custom_fields as Record<string, string>).applications).toBe('');
+});

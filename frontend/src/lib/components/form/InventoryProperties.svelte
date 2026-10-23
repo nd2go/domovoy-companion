@@ -290,6 +290,11 @@
 							oninput={(event) => updateValue(id, event.currentTarget.value)}
 						/>
 					{/if}
+					{#if field?.kind === 'choices'}
+						<button type="button" class="mt-1 text-sm underline" onclick={() => updateValue(id, '')}
+							>Mark {field.label} as unknown</button
+						>
+					{/if}
 					{#if field?.unit}
 						<label class="mt-1 block text-sm"
 							>Input unit for {field.label}<select
