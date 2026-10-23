@@ -7,7 +7,9 @@ Do not change the task scope or dependencies during review.
 ## Code Review Rules
 
 For every code review, read [Human Code Review](review/human-code-review/SKILL.md) and its relevant standards reference.
-Complete separate passes for logic, edge cases, tests, CPU and memory, and readability.
+Complete separate passes for logic, edge cases, tests, security, CPU and memory, and readability.
+When external input or its controls are affected, complete [the security input review](review/human-code-review/references/security-inputs.md).
+Trace each affected path. Verify permissions, injection defenses, resource budgets, and negative tests.
 Use English and ASD-STE100 Issue 9 for new code comments, docstrings, developer prose, and review findings.
 Preserve exact literals and required translations. Keep necessary API documentation, constraints, licenses, and tool directives.
 Report concrete findings, commands, results, and remaining limits. Do not claim STE conformity without the required checks.

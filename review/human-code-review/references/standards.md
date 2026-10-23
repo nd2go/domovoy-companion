@@ -29,3 +29,10 @@ Product names and identifiers must retain their exact form. Technical terms must
   Check the actual daemon, architecture, container limits, and host access when relevant.
 
 These sources guide review. They do not establish a universal community rule for every design choice.
+
+## Security
+
+Use [the security input review](security-inputs.md) whenever a change affects external input or its controls.
+It links the applicable OWASP requirements, abuse cases, and verification methods.
+ASVS 5.0.0 is the stable baseline checked on 23 October 2026. Use versioned requirement IDs when citing individual controls.
+The [OWASP Secure Coding with AI guide](https://cheatsheetseries.owasp.org/cheatsheets/Secure_Coding_with_AI_Cheat_Sheet.html) also covers AI-assisted development.
