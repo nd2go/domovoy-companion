@@ -1,0 +1,4 @@
+interface:
+  display_name: "Human Code Review"
+  short_description: "Review logic, tests, resources, and clear English"
+  default_prompt: "Use $human-code-review to review this change in separate passes and report only actionable findings."
