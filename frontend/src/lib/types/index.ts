@@ -115,6 +115,8 @@ export interface ThumbnailTransform {
 
 /** Item detected by AI, ready for review */
 export interface ReviewItem extends ItemCore, ItemExtended {
+	schema_revision?: number;
+	category_id?: string | null;
 	/** Index of the source image in capturedImages array */
 	sourceImageIndex: number;
 	/** Additional images for this specific item */
@@ -241,6 +243,8 @@ export interface BatchCreateRequest {
 
 /** Item input for creation (with location) */
 export interface ItemInput extends ItemCore, ItemExtended {
+	schema_revision?: number;
+	category_id?: string | null;
 	location_id?: string | null;
 	parent_id?: string | null;
 	insured?: boolean;

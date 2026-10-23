@@ -27,6 +27,7 @@
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
 	import DuplicateWarningIcon from '$lib/components/DuplicateWarningIcon.svelte';
 	import InfoTooltip from '$lib/components/InfoTooltip.svelte';
+	import InventoryProperties from '$lib/components/form/InventoryProperties.svelte';
 	import { workflowLogger as log } from '$lib/utils/logger';
 	import { longpress } from '$lib/actions/longpress';
 	import { SquarePen, ImageIcon, ChevronsRight, Check } from 'lucide-svelte';
@@ -63,6 +64,8 @@
 	let showAiCorrection = $state(false);
 	let showThumbnailEditor = $state(false);
 	let isProcessing = $state(false);
+	let schemaAvailable = $state(false);
+	let propertyEditor = $state<{ validate: () => Promise<boolean> }>();
 	let allImages = $state<File[]>([]);
 	let showConfirmAllDialog = $state(false);
 
@@ -237,14 +240,17 @@
 		return editedItem;
 	}
 
-	function confirmItem() {
-		const item = prepareItemForConfirmation();
-		if (!item) return;
-
-		workflow.confirmItem(item);
-
-		// Scroll to top for next item
-		window.scrollTo({ top: 0, behavior: 'smooth' });
+	async function confirmItem() {
+		isProcessing = true;
+		try {
+			if (propertyEditor && !(await propertyEditor.validate())) return;
+			const item = prepareItemForConfirmation();
+			if (!item) return;
+			workflow.confirmItem(item);
+			window.scrollTo({ top: 0, behavior: 'smooth' });
+		} finally {
+			isProcessing = false;
+		}
 	}
 
 	function handleLongPressConfirm() {
@@ -252,16 +258,17 @@
 		showConfirmAllDialog = true;
 	}
 
-	function handleConfirmAll() {
-		// Prepare the current item with any user edits
-		const preparedItem = prepareItemForConfirmation();
-
-		// Use the workflow method that handles confirming all items including the current one
-		workflow.confirmAllRemainingItems(preparedItem ?? undefined);
-		showConfirmAllDialog = false;
-
-		// Navigate to summary
-		goto(resolve('/summary'));
+	async function handleConfirmAll() {
+		isProcessing = true;
+		try {
+			if (propertyEditor && !(await propertyEditor.validate())) return;
+			const preparedItem = prepareItemForConfirmation();
+			workflow.confirmAllRemainingItems(preparedItem ?? undefined);
+			showConfirmAllDialog = false;
+			await goto(resolve('/summary'));
+		} finally {
+			isProcessing = false;
+		}
 	}
 
 	// Calculate remaining items count for dialog
@@ -498,8 +505,15 @@
 					idPrefix="review"
 				/>
 
+				<InventoryProperties
+					bind:item={editedItem}
+					bind:available={schemaAvailable}
+					bind:this={propertyEditor}
+					disabled={isProcessing}
+				/>
+
 				<!-- Custom fields panel (only when custom fields are configured) -->
-				{#if editedItem.custom_fields && Object.keys(editedItem.custom_fields).length > 0}
+				{#if !schemaAvailable && editedItem.custom_fields && Object.keys(editedItem.custom_fields).length > 0}
 					<ItemCustomFields
 						bind:customFields={editedItem.custom_fields}
 						expanded={showCustomFields}
