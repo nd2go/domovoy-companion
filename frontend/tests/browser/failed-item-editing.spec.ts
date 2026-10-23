@@ -286,8 +286,8 @@ test('edits and retries a single failed item with its photo', async ({ page }) =
 	await expect(page.getByRole('img', { name: 'Fixed lamp' })).toBeVisible();
 	await page.getByRole('button', { name: 'Retry Failed Items' }).click();
 
-	expect(submissions.map(({ name }) => name)).toEqual(['Bad lamp', 'Fixed lamp']);
 	await expect(page).toHaveURL(/\/success$/);
+	expect(submissions.map(({ name }) => name)).toEqual(['Bad lamp', 'Fixed lamp']);
 });
 
 test('mixed batch retries only the corrected failure', async ({ page }) => {
@@ -299,8 +299,8 @@ test('mixed batch retries only the corrected failure', async ({ page }) => {
 	await page.getByRole('button', { name: 'Save Changes' }).click();
 	await page.getByRole('button', { name: 'Retry Failed Items' }).click();
 
-	expect(submissions.map(({ name }) => name)).toEqual(['Good chair', 'Bad table', 'Fixed table']);
 	await expect(page).toHaveURL(/\/success$/);
+	expect(submissions.map(({ name }) => name)).toEqual(['Good chair', 'Bad table', 'Fixed table']);
 });
 
 test('post-create auth failure is visible and cannot be retried as a new item', async ({

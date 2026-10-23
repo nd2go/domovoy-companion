@@ -19,6 +19,7 @@
 	import FieldPrefsSection from '$lib/components/settings/FieldPrefsSection.svelte';
 	import LLMProfilesSection from '$lib/components/settings/LLMProfilesSection.svelte';
 	import LogsSection from '$lib/components/settings/LogsSection.svelte';
+	import InventorySchemaSection from '$lib/components/settings/InventorySchemaSection.svelte';
 
 	onMount(async () => {
 		// Wait for auth initialization to complete to avoid race conditions
@@ -72,6 +73,7 @@
 	<AboutSection />
 	<LLMProfilesSection />
 	<FieldPrefsSection />
+	<InventorySchemaSection />
 	<LogsSection />
 
 	<!-- Bottom spacing for nav -->
