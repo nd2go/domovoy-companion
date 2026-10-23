@@ -204,6 +204,7 @@ test('category changes retain properties and unit conversion reaches submission'
 	page,
 }) => {
 	const model = await installApi(page);
+	Object.assign(model.detectedFields, { quantity_unit: 'packs' });
 	await openReview(page);
 	await page.getByLabel('Item category').selectOption('screw');
 	await page.getByLabel('Diameter', { exact: true }).fill('0.6');
@@ -223,7 +224,7 @@ test('category changes retain properties and unit conversion reaches submission'
 			diameter_mm: '6',
 			owner_note: 'Keep me',
 			inventory_category: 'screw',
-			quantity_unit: 'pcs',
+			quantity_unit: 'packs',
 		},
 	});
 });
@@ -408,7 +409,9 @@ test('multiple choice distinguishes an unknown value from a known empty list', a
 	await page.getByRole('button', { name: 'Add to this item', exact: true }).click();
 	await page.getByLabel('Applications', { exact: true }).selectOption(['wood']);
 	await page.getByLabel('Applications', { exact: true }).selectOption([]);
+	await expect(page.getByText('No choices selected', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Mark Applications as unknown' }).click();
+	await expect(page.getByText('Unknown', { exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
 	await page.getByRole('button', { name: /Submit All Items/ }).click();
 	await expect.poll(() => model.submitted.length).toBe(1);

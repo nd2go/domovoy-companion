@@ -31,7 +31,7 @@ Readability: use the repository's Svelte components and typed API conventions. N
 The official STE PDF returned 403, so the dictionary check remains incomplete.
 
 Review found that stored drafts omitted `custom_fields`. Serialization now retains values, category and schema revision.
-Review also found that category changes cleared the selected input unit. The unit now remains attached to its field.
+Review also found that category changes cleared the selected input unit. The unit now remains attached to its field. Existing count-unit text is also retained when the category changes.
 Known properties are validated even when the user does not edit them. Bulk-confirmed items are checked before submission.
 Two existing browser assertions ran before their retry completed. They now wait for the successful screen.
 Their exact request-list assertions still check order and prevent duplicate creation.
@@ -45,3 +45,18 @@ Real iPhone and Android checks have not run. Keep DATA06 open and its PR in draf
 The new AI proposal stage is DATA07. It still depends on the open AI02 task.
 Post-merge regression also exposed an intermittent photo-count failure in the pinned Homebox boundary.
 That finding is being diagnosed separately; it is not a schema test pass.
+
+## Pending phone checklist
+
+Run the same steps on a real iPhone and Android against an isolated build of this branch.
+Record device, OS, browser and build SHA. Use synthetic items and images.
+
+1. Sign in or select the configured collection. Select a room and an item box.
+2. In Settings, add a decimal property with a unit, a shared block and two categories that use the block. Preview and apply.
+3. Capture a synthetic label. In Review, select the new category, set a decimal comma value, zero and a false boolean. Keep one property unknown.
+4. Change category, then return. Check that the values and source unit remain. Confirm and save in the selected box. Read the values and original photo through Homebox.
+5. Add a property only to one item. Check that the template does not change. Repeat with the separate template checkbox enabled.
+6. Change a definition in another browser tab. Try the old revision, check the conflict and retained edits, then reload and review. Repeat after access expires or is revoked.
+7. Enter another item and reload a saved draft. Check touch controls, date and multiple-choice controls, error text, navigation and absence of horizontal overflow.
+
+These steps are a test plan. They have not been executed on physical devices.

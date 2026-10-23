@@ -110,7 +110,11 @@
 		if (!registry) return;
 		item.category_id = value || null;
 		item.schema_revision = registry.revision;
-		item.custom_fields = { ...item.custom_fields, inventory_category: value, quantity_unit: 'pcs' };
+		item.custom_fields = {
+			...item.custom_fields,
+			inventory_category: value,
+			quantity_unit: item.custom_fields?.quantity_unit ?? 'pcs',
+		};
 		proposal = null;
 		error = '';
 	}
@@ -291,6 +295,9 @@
 						/>
 					{/if}
 					{#if field?.kind === 'choices'}
+						{#if choices(value).length === 0}<p class="text-sm text-neutral-400">
+								{value === '' ? 'Unknown' : 'No choices selected'}
+							</p>{/if}
 						<button type="button" class="mt-1 text-sm underline" onclick={() => updateValue(id, '')}
 							>Mark {field.label} as unknown</button
 						>
