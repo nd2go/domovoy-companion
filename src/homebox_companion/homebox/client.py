@@ -6,6 +6,7 @@ The sync client has been removed - use async/await throughout.
 
 from __future__ import annotations
 
+import asyncio
 import functools
 import socket
 from collections.abc import Callable
@@ -1261,6 +1262,13 @@ class HomeboxClient:
         Returns:
             The attachment response dictionary (raw API response).
         """
+        before = await self._settle_photo_writes(token, item_id, await self.get_item(token, item_id))
+        if self._has_pending_photos(before):
+            raise HomeboxAPIError(
+                "Homebox photo processing is still active",
+                user_message="Homebox is still preparing earlier photos. Please retry later.",
+            )
+        previous_ids = {row["id"] for row in before.get("attachments", [])}
         files = {"file": (filename, file_bytes, mime_type)}
         data = {"type": attachment_type, "name": filename}
         response = await self.client.post(
@@ -1270,7 +1278,35 @@ class HomeboxClient:
             data=data,
         )
         self._ensure_success(response, "Upload attachment")
-        return response.json()
+        # Homebox can return 200 after a failed SQLite attachment write.
+        saved = await self.get_item(token, item_id)
+        if not any(row["id"] not in previous_ids for row in saved.get("attachments", [])):
+            raise HomeboxAPIError(
+                "Homebox did not persist the attachment",
+                user_message="Homebox did not save this photo. Please retry the photo upload.",
+            )
+        return await self._settle_photo_writes(token, item_id, saved)
+
+    @staticmethod
+    def _has_pending_photos(item: dict[str, Any]) -> bool:
+        return any(row.get("type") == "photo" and not row.get("thumbnail") for row in item.get("attachments", []))
+
+    async def _settle_photo_writes(self, token: str, item_id: str, item: dict[str, Any]) -> dict[str, Any]:
+        """Bound the wait for Homebox thumbnail transactions. Never repeat an upload."""
+        try:
+            async with asyncio.timeout(5):
+                for _ in range(20):
+                    if not self._has_pending_photos(item):
+                        break
+                    await asyncio.sleep(0.25)
+                    try:
+                        item = await self.get_item(token, item_id)
+                    except HomeboxAPIError as exc:
+                        if exc.context.get("status_code") not in (500, 503):
+                            raise
+        except TimeoutError:
+            pass
+        return item
 
     async def upload_attachment_typed(
         self,
