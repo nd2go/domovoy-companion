@@ -185,6 +185,30 @@ test('editor creates a property, shared block and new category without code chan
 		Object.values(model.schema.categories).find((x) => x.label === 'Marine supplies')?.blocks
 	).toContain(blockId);
 	expect(model.schema.blocks[blockId].fields).toEqual([fieldId]);
+	const categoryId = Object.keys(model.schema.categories).find(
+		(id) => model.schema.categories[id].label === 'Marine supplies'
+	)!;
+	await editor.getByLabel('Edit definition').selectOption('garden');
+	await editor
+		.getByRole('listbox', { name: 'Shared blocks', exact: true })
+		.selectOption([...seed.categories.garden.blocks, blockId]);
+	await editor.getByRole('button', { name: 'Preview changes' }).click();
+	await editor.getByRole('button', { name: 'Apply definitions' }).click();
+	await expect(editor.getByRole('status')).toContainText('Definitions saved');
+	expect(model.schema.categories.garden.blocks).toContain(blockId);
+	expect(model.schema.categories[categoryId].blocks).toContain(blockId);
+	expect(
+		Object.values(model.schema.fields).filter((field) => field.label === 'Batch length')
+	).toHaveLength(1);
+	await openReview(page);
+	await page.getByLabel('Item category').selectOption(categoryId);
+	await page.getByLabel('Batch length', { exact: true }).fill('0.6');
+	await page.getByLabel('Input unit for Batch length').selectOption('cm');
+	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+	await page.getByRole('button', { name: /Submit All Items/ }).click();
+	await expect.poll(() => model.submitted.length).toBe(1);
+	expect(model.submitted[0].category_id).toBe(categoryId);
+	expect((model.submitted[0].custom_fields as Record<string, string>)[fieldId]).toBe('6');
 });
 
 test('revision conflict keeps editor changes', async ({ page }) => {
