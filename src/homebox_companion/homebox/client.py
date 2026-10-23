@@ -1262,12 +1262,7 @@ class HomeboxClient:
         Returns:
             The attachment response dictionary (raw API response).
         """
-        before = await self._settle_photo_writes(token, item_id, await self.get_item(token, item_id))
-        if self._has_pending_photos(before):
-            raise HomeboxAPIError(
-                "Homebox photo processing is still active",
-                user_message="Homebox is still preparing earlier photos. Please retry later.",
-            )
+        before = await self.get_item(token, item_id)
         previous_ids = {row["id"] for row in before.get("attachments", [])}
         files = {"file": (filename, file_bytes, mime_type)}
         data = {"type": attachment_type, "name": filename}
@@ -1280,23 +1275,25 @@ class HomeboxClient:
         self._ensure_success(response, "Upload attachment")
         # Homebox can return 200 after a failed SQLite attachment write.
         saved = await self.get_item(token, item_id)
-        if not any(row["id"] not in previous_ids for row in saved.get("attachments", [])):
+        added_ids = {row["id"] for row in saved.get("attachments", [])} - previous_ids
+        if not added_ids:
             raise HomeboxAPIError(
                 "Homebox did not persist the attachment",
                 user_message="Homebox did not save this photo. Please retry the photo upload.",
             )
-        return await self._settle_photo_writes(token, item_id, saved)
+        return await self._settle_photo_writes(token, item_id, saved, added_ids)
 
-    @staticmethod
-    def _has_pending_photos(item: dict[str, Any]) -> bool:
-        return any(row.get("type") == "photo" and not row.get("thumbnail") for row in item.get("attachments", []))
-
-    async def _settle_photo_writes(self, token: str, item_id: str, item: dict[str, Any]) -> dict[str, Any]:
-        """Bound the wait for Homebox thumbnail transactions. Never repeat an upload."""
+    async def _settle_photo_writes(
+        self, token: str, item_id: str, item: dict[str, Any], attachment_ids: set[str]
+    ) -> dict[str, Any]:
+        """Bound the wait for new thumbnail transactions. Never repeat an upload."""
         try:
             async with asyncio.timeout(5):
                 for _ in range(20):
-                    if not self._has_pending_photos(item):
+                    if not any(
+                        row.get("id") in attachment_ids and row.get("type") == "photo" and not row.get("thumbnail")
+                        for row in item.get("attachments", [])
+                    ):
                         break
                     await asyncio.sleep(0.25)
                     try:

@@ -7,10 +7,10 @@ A diagnostic run reproduced this twice in 40 scenarios. Homebox logged `database
 The Homebox repository rolls back this failed save but returns the rollback result. A successful rollback can hide the write error.
 Thumbnail processing uses a separate SQLite transaction and can overlap the next upload.
 
-Companion now waits for earlier thumbnail writes before the next upload and checks the saved attachment IDs through a new item read.
+Companion now checks saved attachment IDs through a new item read and waits for those new thumbnail writes before returning.
 A 200 response without a new saved ID raises an error. The client does not repeat the POST.
 Thumbnail waits have a five-second deadline and at most 20 polls, spaced by 250 ms.
-Transient 500/503 reads can settle within that budget. If previous photos stay pending, no new upload starts.
+Transient 500/503 reads can settle within that budget. Disabled or failed thumbnails do not reject an already saved photo. Older missing thumbnails do not delay the new photo.
 After a confirmed upload, a thumbnail timeout keeps the saved original and returns its item state.
 The Homebox core and pinned image are unchanged.
 
@@ -33,10 +33,10 @@ No inventory data, credentials, model output or raw logs are committed.
 ## Review passes
 
 Logic: require a new saved attachment ID before reporting success. Never repeat the upload inside the client.
-Boundaries: stop before POST when older photo work exceeds the budget. Keep transport failures distinct from saved photos.
+Boundaries: stop waiting within the budget. Keep transport failures distinct from saved photos, including when thumbnails are disabled.
 Tests: cover false 200, independent GET, pending work, transient read locks and lost POST responses.
 Security: use the same request-bound credential and collection for every read and write. No new external destination is used.
-Resources: at most two bounded thumbnail waits; each has 20 polls and a five-second deadline. Existing upload and HTTP limits remain in force.
+Resources: one thumbnail wait with at most 20 polls and a five-second deadline. Existing upload and HTTP limits remain in force.
 Readability: keep one constraint comment and a short helper contract. The STE dictionary check was unavailable; no conformity claim is made.
 
 This prevents the observed sequence and detects false success. It does not provide distributed upload idempotency across other clients.

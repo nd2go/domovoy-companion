@@ -1,7 +1,5 @@
 """Check attachment persistence without a live server."""
 
-import copy
-
 import httpx
 import pytest
 
@@ -33,11 +31,9 @@ async def test_upload_checks_independent_item_read(persisted):
 
 
 @pytest.mark.asyncio
-async def test_upload_waits_for_previous_photo_transaction(monkeypatch):
-    pending = {"attachments": [{"id": "old", "type": "photo", "thumbnail": None}]}
-    ready = copy.deepcopy(pending)
-    ready["attachments"][0]["thumbnail"] = {"id": "thumb"}
+async def test_upload_waits_for_new_photo_transaction(monkeypatch):
     calls = []
+    photo = {"id": "new", "type": "photo", "thumbnail": None}
 
     async def no_wait(_delay):
         pass
@@ -47,21 +43,22 @@ async def test_upload_waits_for_previous_photo_transaction(monkeypatch):
     def upstream(request):
         calls.append(request.method)
         if len(calls) == 1:
-            return httpx.Response(200, json=pending)
-        if request.method == "POST":
-            ready["attachments"].append({"id": "new", "type": "photo", "thumbnail": {"id": "thumb-new"}})
-        return httpx.Response(200, json=ready)
+            return httpx.Response(200, json={"attachments": []})
+        if len(calls) > 3:
+            photo["thumbnail"] = {"id": "thumb"}
+        return httpx.Response(200, json={"attachments": [photo]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as transport:
         async with HomeboxClient(base_url="http://homebox.test/api/v1", client=transport) as client:
-            assert len((await client.upload_attachment("session", "item-1", b"photo", "photo.jpg"))["attachments"]) == 2
-    assert calls == ["GET", "GET", "POST", "GET"]
+            result = await client.upload_attachment("session", "item-1", b"photo", "photo.jpg")
+    assert result["attachments"][0]["thumbnail"] == {"id": "thumb"}
+    assert calls == ["GET", "POST", "GET", "GET"]
 
 
 @pytest.mark.asyncio
-async def test_pending_photo_budget_does_not_start_or_repeat_upload(monkeypatch):
+async def test_disabled_thumbnails_do_not_fail_or_repeat_saved_upload(monkeypatch):
     calls = []
-    pending = {"attachments": [{"id": "old", "type": "photo", "thumbnail": None}]}
+    photo = {"id": "new", "type": "photo", "thumbnail": None}
 
     async def no_wait(_delay):
         pass
@@ -70,13 +67,13 @@ async def test_pending_photo_budget_does_not_start_or_repeat_upload(monkeypatch)
 
     def upstream(request):
         calls.append(request.method)
-        return httpx.Response(200, json=pending)
+        return httpx.Response(200, json={"attachments": [] if len(calls) == 1 else [photo]})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(upstream)) as transport:
         async with HomeboxClient(base_url="http://homebox.test/api/v1", client=transport) as client:
-            with pytest.raises(HomeboxAPIError, match="still active"):
-                await client.upload_attachment("session", "item-1", b"photo", "photo.jpg")
-    assert calls == ["GET"] * 21
+            result = await client.upload_attachment("session", "item-1", b"photo", "photo.jpg")
+    assert result["attachments"] == [photo]
+    assert calls == ["GET", "POST", "GET"] + ["GET"] * 20
 
 
 @pytest.mark.asyncio
