@@ -23,6 +23,7 @@
 	let newLabel = $state('');
 	let newChoice = $state('');
 	let previewCount = $state(0);
+	let changeSummary = $state<string[]>([]);
 	let generation = 0;
 	const kinds: FieldKind[] = ['text', 'integer', 'decimal', 'boolean', 'date', 'choice', 'choices'];
 	const entries = $derived(draft ? Object.entries(draft[tab]) : []);
@@ -85,16 +86,28 @@
 
 	async function preview() {
 		if (!draft || !original) return;
+		const current = generation;
 		busy = true;
 		error = '';
 		try {
 			const result = await inventorySchema.preview($state.snapshot(draft), original.revision);
+			if (current !== generation) return;
+			changeSummary = [];
+			for (const group of ['categories', 'blocks', 'fields', 'units'] as const) {
+				for (const [id, value] of Object.entries(draft[group])) {
+					const before = original.schema[group][id];
+					if (JSON.stringify(before) !== JSON.stringify(value)) {
+						changeSummary.push(`${before ? 'Update' : 'Add'} ${group}: ${value.label}`);
+					}
+				}
+			}
 			previewCount = Object.keys(result.templates).length;
 			previewed = true;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Cannot check definitions.';
+			if (current === generation)
+				error = e instanceof Error ? e.message : 'Cannot check definitions.';
 		} finally {
-			busy = false;
+			if (current === generation) busy = false;
 		}
 	}
 
@@ -102,16 +115,19 @@
 		if (!draft || !original || !previewed) return;
 		busy = true;
 		error = '';
+		const current = generation;
 		try {
 			const result = await inventorySchema.apply($state.snapshot(draft), original.revision);
+			if (current !== generation) return;
 			original = result;
 			draft = structuredClone(result.schema);
 			previewed = false;
 			message = 'Definitions saved. Existing inventory was kept.';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Cannot apply definitions.';
+			if (current === generation)
+				error = e instanceof Error ? e.message : 'Cannot apply definitions.';
 		} finally {
-			busy = false;
+			if (current === generation) busy = false;
 		}
 	}
 
@@ -119,21 +135,26 @@
 		const input = event.currentTarget as HTMLInputElement;
 		const file = input.files?.[0];
 		if (!file || !original) return;
+		const current = generation;
+		const revision = original.revision;
 		busy = true;
 		error = '';
 		try {
 			if (file.size > 2 * 1024 * 1024) throw new Error('The import limit is 2 MiB.');
 			const parsed = JSON.parse(await file.text());
+			if (current !== generation) return;
 			const schema: InventorySchema = parsed.schema ?? parsed;
-			await inventorySchema.preview(schema, original.revision);
+			await inventorySchema.preview(schema, revision);
+			if (current !== generation) return;
 			draft = schema;
 			selected = Object.keys(schema[tab])[0] ?? '';
 			changed();
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Invalid definition file.';
+			if (current === generation)
+				error = e instanceof Error ? e.message : 'Invalid definition file.';
 		} finally {
 			input.value = '';
-			busy = false;
+			if (current === generation) busy = false;
 		}
 	}
 
@@ -378,8 +399,12 @@
 				disabled={busy}>Discard edits and reload</button
 			>
 		</div>
-		{#if previewed}<p role="status">
-				Checked {previewCount} templates. Applying changes keeps existing inventory values.
+		{#if previewed}<ul aria-label="Definition changes" class="list-inside list-disc text-sm">
+				{#each changeSummary.slice(0, 40) as change, index (index)}<li>{change}</li>{/each}
+			</ul>
+			<p role="status">
+				Checked {previewCount} templates and {changeSummary.length} definition changes. Applying changes
+				keeps existing inventory values.
 			</p>{/if}
 	{:else if busy}<p role="status">Loading inventory definitions…</p>
 	{:else}<button type="button" onclick={() => void load()}>Retry inventory definitions</button>{/if}

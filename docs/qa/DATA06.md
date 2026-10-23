@@ -8,7 +8,7 @@ Choice labels can change while their stored IDs stay fixed. The optional `option
 
 ## Executed verification
 
-The complete browser suite passed: 43 tests, including all 34 existing tests.
+The complete browser suite passed: 44 tests, including all 34 existing tests.
 New checks cover category creation, shared blocks, revision conflicts, typed submission and unit conversion.
 They also cover local versus template properties, invalid values, draft recovery, and 393/412-pixel viewports.
 The API is mocked in these browser tests. They do not prove real recognition or physical-device support.
@@ -34,6 +34,9 @@ Review also found that category changes cleared the selected input unit. The uni
 Known properties are validated even when the user does not edit them. Bulk-confirmed items are checked before submission.
 Two existing browser assertions ran before their retry completed. They now wait for the successful screen.
 Their exact request-list assertions still check order and prevent duplicate creation.
+Late responses cannot replace definitions after the account, collection or current item changes.
+A browser regression holds a write response while switching collections and checks that the new editor stays intact.
+Preview lists added and changed definitions before apply.
 
 ## Open acceptance
 

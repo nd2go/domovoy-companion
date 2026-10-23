@@ -2,6 +2,7 @@
 	import { untrack } from 'svelte';
 	import { getInitPromise } from '$lib/services/bootstrap';
 	import { collectionStore } from '$lib/stores/collection.svelte';
+	import { authStore } from '$lib/stores/auth.svelte';
 	import type { ReviewItem } from '$lib/types';
 	import {
 		inventorySchema,
@@ -34,6 +35,7 @@
 	let includeTemplate = $state(false);
 	let proposal = $state<{ id: string; schema: InventorySchema } | null>(null);
 	let generation = 0;
+	let operation = 0;
 	const category = $derived(item.category_id ?? item.custom_fields?.inventory_category ?? '');
 	const displayedFields = $derived(
 		registry
@@ -50,17 +52,24 @@
 
 	$effect(() => {
 		const group = collectionStore.selectedId;
+		const identity = authStore.contextId;
 		untrack(() => {
 			const current = ++generation;
+			operation++;
+			busy = false;
+			proposal = null;
 			available = false;
 			registry = null;
 			void load(current);
 		});
 		void group;
+		void identity;
 	});
 	$effect(() => {
 		const currentItem = item;
 		untrack(() => {
+			operation++;
+			busy = false;
 			inputUnits = {};
 			proposal = null;
 			error = '';
@@ -121,6 +130,8 @@
 			error = 'Reload inventory definitions before saving this card.';
 			return false;
 		}
+		const current = ++operation;
+		const target = item;
 		busy = true;
 		error = '';
 		try {
@@ -130,21 +141,25 @@
 				item.custom_fields ?? {},
 				inputUnits
 			);
+			if (current !== operation || item !== target) return false;
 			item.custom_fields = result.values;
 			item.schema_revision = result.revision;
 			item.category_id = category || null;
 			inputUnits = {};
 			return true;
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Check the property values.';
+			if (current === operation && item === target)
+				error = e instanceof Error ? e.message : 'Check the property values.';
 			return false;
 		} finally {
-			busy = false;
+			if (current === operation) busy = false;
 		}
 	}
 
 	async function previewProperty() {
 		if (!registry || !newLabel.trim()) return;
+		const current = ++operation;
+		const target = item;
 		busy = true;
 		error = '';
 		try {
@@ -163,28 +178,38 @@
 			}
 			if (includeTemplate && category) schema.categories[category].fields.push(id);
 			await inventorySchema.preview(schema, registry.revision);
+			if (current !== operation || item !== target) return;
 			proposal = { id, schema };
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Cannot check the new property.';
+			if (current === operation && item === target)
+				error = e instanceof Error ? e.message : 'Cannot check the new property.';
 		} finally {
-			busy = false;
+			if (current === operation) busy = false;
 		}
 	}
 
 	async function acceptProperty() {
 		if (!proposal || !registry) return;
+		const current = ++operation;
+		const target = item;
 		busy = true;
 		error = '';
 		try {
-			registry = await inventorySchema.apply($state.snapshot(proposal.schema), registry.revision);
+			const result = await inventorySchema.apply(
+				$state.snapshot(proposal.schema),
+				registry.revision
+			);
+			if (current !== operation || item !== target) return;
+			registry = result;
 			item.schema_revision = registry.revision;
 			updateValue(proposal.id, '');
 			proposal = null;
 			newLabel = '';
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Cannot add the property.';
+			if (current === operation && item === target)
+				error = e instanceof Error ? e.message : 'Cannot add the property.';
 		} finally {
-			busy = false;
+			if (current === operation) busy = false;
 		}
 	}
 </script>

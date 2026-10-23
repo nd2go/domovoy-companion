@@ -47,7 +47,13 @@ async function installApi(page: Page) {
 					default_group_id: 'g1',
 				})
 			);
-		if (path === '/api/groups') return route.fulfill(json([{ id: 'g1', name: 'Personal' }]));
+		if (path === '/api/groups')
+			return route.fulfill(
+				json([
+					{ id: 'g1', name: 'Personal' },
+					{ id: 'g2', name: 'Shared' },
+				])
+			);
 		if (path === '/api/version')
 			return route.fulfill(
 				json({ version: 'test', latest_version: null, update_available: false })
@@ -320,4 +326,43 @@ test('adding a property to a template needs an explicit selection', async ({ pag
 		(id) => model.schema.fields[id].label === 'Thread standard source'
 	)!;
 	expect(model.schema.categories.screw.fields).toContain(id);
+});
+
+test('late schema application cannot overwrite a newly selected collection', async ({ page }) => {
+	await installApi(page);
+	let release!: () => void;
+	const held = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	let started!: () => void;
+	const pending = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	await page.route('**/api/settings/inventory-schema', async (route) => {
+		const request = route.request();
+		if (request.method() === 'PUT') {
+			started();
+			await held;
+			return route.fulfill(json({ schema: request.postDataJSON().schema, revision: 1 }));
+		}
+		const schema = structuredClone(seed);
+		schema.categories.tool.label =
+			request.headers()['x-group-id'] === 'g2' ? 'Shared tools' : 'Personal tools';
+		return route.fulfill(json({ schema, revision: 0 }));
+	});
+	await page.goto('/settings');
+	const editor = page.getByRole('region', { name: 'Categories and properties' });
+	await editor.getByLabel('Display name').fill('Personal tools changed');
+	await editor.getByRole('button', { name: 'Preview changes' }).click();
+	await expect(editor.getByLabel('Definition changes')).toContainText('Personal tools changed');
+	await editor.getByRole('button', { name: 'Apply definitions' }).click();
+	await pending;
+	await page.getByRole('button', { name: /Personal/ }).click();
+	await page.getByRole('option', { name: /Shared/ }).click();
+	await expect(editor.getByLabel('Display name')).toHaveValue('Shared tools');
+	const response = page.waitForResponse((response) => response.request().method() === 'PUT');
+	release();
+	await response;
+	await expect(editor.getByLabel('Display name')).toHaveValue('Shared tools');
+	await expect(editor.getByText('Definitions saved.', { exact: false })).toHaveCount(0);
 });
