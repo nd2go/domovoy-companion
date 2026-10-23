@@ -43,7 +43,8 @@ def effective_fields(schema, category_id):
         check(category is not None, "Unknown category")
         result.extend(category["fields"])
         for block_id in category["blocks"]:
-            result.extend(schema["blocks"][block_id]["fields"])
+            if not schema["blocks"][block_id].get("archived"):
+                result.extend(schema["blocks"][block_id]["fields"])
         category_id = category.get("parent")
     result = list(dict.fromkeys(result))
     check(len(result) <= MAX_FIELDS, "Too many fields in a template")

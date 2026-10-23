@@ -45,3 +45,9 @@ At most four schema operations run per application process. A full projection ha
 A failed update requires reconciliation; it must not be described as an inventory transaction.
 Direct Homebox edits have no compare-and-swap guarantee. The application lock covers Companion schema updates.
 Legacy clients keep their text-field API. Raw Homebox edits do not gain Companion type guarantees.
+
+The final review found that an archived block still contributed template fields.
+Template composition now omits it. A regression test covers inherited blocks.
+The first CI attempt failed an unchanged reauthentication browser test.
+That test passed alone, and all 34 existing browser tests passed locally.
+The failed jobs passed on retry. No authentication code or test assertion was changed.

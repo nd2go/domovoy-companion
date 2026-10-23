@@ -109,3 +109,11 @@ class SchemaTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_archived_block_is_not_projected():
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "src/homebox_companion/inventory_schema_seed.json").read_text()
+    )
+    schema["blocks"]["battery"]["archived"] = True
+    assert "battery_platform" not in effective_fields(schema, "drill")
