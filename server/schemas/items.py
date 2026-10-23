@@ -25,6 +25,8 @@ class ItemInput(BaseModel):
     purchase_from: str | None = None
     notes: str | None = None
     insured: bool = False
+    schema_revision: int | None = Field(default=None, ge=0, strict=True)
+    category_id: str | None = Field(default=None, max_length=64)
     # Custom fields: map of display name → text value
     custom_fields: dict[str, str] | None = None
 

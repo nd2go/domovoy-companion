@@ -9,6 +9,7 @@ from .custom_fields import router as custom_fields_router
 from .field_preferences import router as field_preferences_router
 from .groups import router as groups_router
 from .homebox import router as homebox_router
+from .inventory_schema import router as inventory_schema_router
 from .items import router as items_router
 from .llm_profiles import router as llm_profiles_router
 from .locations import router as locations_router
@@ -26,6 +27,7 @@ api_router.include_router(auth_router, tags=["auth"])
 api_router.include_router(chat_router, tags=["chat"])
 api_router.include_router(config_router, tags=["config"])
 api_router.include_router(custom_fields_router, tags=["settings"])
+api_router.include_router(inventory_schema_router, tags=["settings"])
 api_router.include_router(field_preferences_router, tags=["settings"])
 api_router.include_router(groups_router, tags=["groups"])
 api_router.include_router(homebox_router, tags=["homebox"])

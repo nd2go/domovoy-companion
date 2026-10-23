@@ -1,0 +1,647 @@
+{
+  "version": 1,
+  "fields": {
+    "inventory_category": {
+      "label": "Category",
+      "kind": "text"
+    },
+    "quantity_unit": {
+      "label": "Count unit",
+      "kind": "text"
+    },
+    "source_note": {
+      "label": "Source",
+      "kind": "text"
+    },
+    "reviewed_at": {
+      "label": "Card reviewed at",
+      "kind": "text"
+    },
+    "color": {
+      "label": "Color",
+      "kind": "text"
+    },
+    "size": {
+      "label": "Size designation",
+      "kind": "text"
+    },
+    "material": {
+      "label": "Material",
+      "kind": "text"
+    },
+    "finish": {
+      "label": "Finish",
+      "kind": "text"
+    },
+    "purpose": {
+      "label": "Purpose",
+      "kind": "text"
+    },
+    "standard": {
+      "label": "Designation standard",
+      "kind": "text"
+    },
+    "thread": {
+      "label": "Thread designation",
+      "kind": "text"
+    },
+    "shank_type": {
+      "label": "Shank type",
+      "kind": "text"
+    },
+    "connection_type": {
+      "label": "Connection type",
+      "kind": "text"
+    },
+    "battery_platform": {
+      "label": "Battery platform",
+      "kind": "text"
+    },
+    "paint_base": {
+      "label": "Paint base",
+      "kind": "text"
+    },
+    "author": {
+      "label": "Author",
+      "kind": "text"
+    },
+    "isbn": {
+      "label": "ISBN",
+      "kind": "text"
+    },
+    "clothing_material": {
+      "label": "Fabric composition",
+      "kind": "text"
+    },
+    "length_mm": {
+      "label": "Length",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "width_mm": {
+      "label": "Width",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "height_mm": {
+      "label": "Height",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "diameter_mm": {
+      "label": "Diameter",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "mass_g": {
+      "label": "Mass",
+      "kind": "decimal",
+      "unit": "g",
+      "minimum": "0"
+    },
+    "volume_ml": {
+      "label": "Volume",
+      "kind": "decimal",
+      "unit": "ml",
+      "minimum": "0"
+    },
+    "voltage_v": {
+      "label": "Voltage",
+      "kind": "decimal",
+      "unit": "v",
+      "minimum": "0"
+    },
+    "power_w": {
+      "label": "Power",
+      "kind": "decimal",
+      "unit": "w",
+      "minimum": "0"
+    },
+    "cross_section_mm2": {
+      "label": "Conductor cross section",
+      "kind": "decimal",
+      "unit": "mm2",
+      "minimum": "0"
+    },
+    "shank_diameter_mm": {
+      "label": "Shank diameter",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "chuck_min_mm": {
+      "label": "Minimum chuck opening",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "chuck_max_mm": {
+      "label": "Maximum chuck opening",
+      "kind": "decimal",
+      "unit": "mm",
+      "minimum": "0"
+    },
+    "core_count": {
+      "label": "Conductor count",
+      "kind": "integer",
+      "minimum": "1"
+    },
+    "waterproof": {
+      "label": "Waterproof",
+      "kind": "boolean"
+    },
+    "expiry_date": {
+      "label": "Expiry date",
+      "kind": "date"
+    },
+    "condition": {
+      "label": "Condition",
+      "kind": "choice",
+      "options": [
+        "new",
+        "used",
+        "damaged"
+      ]
+    },
+    "applications": {
+      "label": "Applications",
+      "kind": "choices",
+      "options": [
+        "wood",
+        "metal",
+        "masonry",
+        "plastic"
+      ]
+    }
+  },
+  "categories": {
+    "tool": {
+      "label": "Tools and accessories",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance",
+        "electrical",
+        "battery"
+      ],
+      "fields": []
+    },
+    "fastener": {
+      "label": "Fasteners and fittings",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "electrical": {
+      "label": "Electrical supplies and cables",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "plumbing": {
+      "label": "Plumbing, heating and ventilation",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "building_material": {
+      "label": "Building and finishing materials",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "chemical": {
+      "label": "Paints, adhesives and chemicals",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "garden": {
+      "label": "Garden supplies",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "transport": {
+      "label": "Vehicles and accessories",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "electronics": {
+      "label": "Electronics and computers",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance",
+        "electrical",
+        "battery"
+      ],
+      "fields": []
+    },
+    "appliance": {
+      "label": "Household appliances",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance",
+        "electrical",
+        "battery"
+      ],
+      "fields": []
+    },
+    "furniture": {
+      "label": "Furniture and interiors",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "household": {
+      "label": "Kitchen and household supplies",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "clothing": {
+      "label": "Clothing, footwear and accessories",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": [
+        "size",
+        "clothing_material"
+      ]
+    },
+    "sport": {
+      "label": "Sports and outdoor equipment",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "hobby": {
+      "label": "Hobbies, crafts and music",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "children": {
+      "label": "Children and toys",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "book_document": {
+      "label": "Books, documents and stationery",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "collectible": {
+      "label": "Collections, art and valuables",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "food": {
+      "label": "Food and drinks",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance",
+        "dates"
+      ],
+      "fields": []
+    },
+    "care": {
+      "label": "Personal care and medical supplies",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance",
+        "dates"
+      ],
+      "fields": []
+    },
+    "pet": {
+      "label": "Pet supplies",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "container": {
+      "label": "Packaging and containers",
+      "parent": null,
+      "blocks": [
+        "common",
+        "appearance"
+      ],
+      "fields": []
+    },
+    "screw": {
+      "label": "Screws and bolts",
+      "parent": "fastener",
+      "blocks": [
+        "connection",
+        "dimensions"
+      ],
+      "fields": [
+        "diameter_mm"
+      ]
+    },
+    "drill": {
+      "label": "Drills and drill bits",
+      "parent": "tool",
+      "blocks": [
+        "dimensions",
+        "purpose"
+      ],
+      "fields": [
+        "diameter_mm",
+        "shank_type",
+        "shank_diameter_mm",
+        "chuck_min_mm",
+        "chuck_max_mm"
+      ]
+    },
+    "cable": {
+      "label": "Cables",
+      "parent": "electrical",
+      "blocks": [
+        "electrical",
+        "dimensions"
+      ],
+      "fields": [
+        "cross_section_mm2",
+        "core_count"
+      ]
+    },
+    "fitting": {
+      "label": "Pipe fittings",
+      "parent": "plumbing",
+      "blocks": [
+        "connection"
+      ],
+      "fields": [
+        "diameter_mm"
+      ]
+    },
+    "paint": {
+      "label": "Paint",
+      "parent": "chemical",
+      "blocks": [
+        "capacity"
+      ],
+      "fields": [
+        "paint_base"
+      ]
+    },
+    "book": {
+      "label": "Books",
+      "parent": "book_document",
+      "blocks": [],
+      "fields": [
+        "author",
+        "isbn"
+      ]
+    },
+    "box": {
+      "label": "Boxes and organizers",
+      "parent": "container",
+      "blocks": [
+        "dimensions",
+        "capacity"
+      ],
+      "fields": [
+        "waterproof"
+      ]
+    }
+  },
+  "blocks": {
+    "common": {
+      "label": "Common",
+      "fields": [
+        "source_note",
+        "reviewed_at"
+      ]
+    },
+    "appearance": {
+      "label": "Appearance",
+      "fields": [
+        "color",
+        "material",
+        "finish",
+        "condition"
+      ]
+    },
+    "dimensions": {
+      "label": "Dimensions",
+      "fields": [
+        "length_mm",
+        "width_mm",
+        "height_mm",
+        "mass_g"
+      ]
+    },
+    "electrical": {
+      "label": "Electrical",
+      "fields": [
+        "voltage_v",
+        "power_w"
+      ]
+    },
+    "battery": {
+      "label": "Battery",
+      "fields": [
+        "battery_platform"
+      ]
+    },
+    "connection": {
+      "label": "Connections",
+      "fields": [
+        "connection_type",
+        "thread",
+        "standard"
+      ]
+    },
+    "purpose": {
+      "label": "Purpose",
+      "fields": [
+        "purpose",
+        "applications"
+      ]
+    },
+    "capacity": {
+      "label": "Capacity",
+      "fields": [
+        "volume_ml"
+      ]
+    },
+    "dates": {
+      "label": "Dates",
+      "fields": [
+        "expiry_date"
+      ]
+    }
+  },
+  "units": {
+    "mm": {
+      "label": "mm",
+      "dimension": "length",
+      "factor": "1",
+      "offset": "0"
+    },
+    "cm": {
+      "label": "cm",
+      "dimension": "length",
+      "factor": "10",
+      "offset": "0"
+    },
+    "m": {
+      "label": "m",
+      "dimension": "length",
+      "factor": "1000",
+      "offset": "0"
+    },
+    "inch": {
+      "label": "in",
+      "dimension": "length",
+      "factor": "25.4",
+      "offset": "0"
+    },
+    "mm2": {
+      "label": "mm²",
+      "dimension": "area",
+      "factor": "1",
+      "offset": "0"
+    },
+    "cm2": {
+      "label": "cm²",
+      "dimension": "area",
+      "factor": "100",
+      "offset": "0"
+    },
+    "m2": {
+      "label": "m²",
+      "dimension": "area",
+      "factor": "1000000",
+      "offset": "0"
+    },
+    "ml": {
+      "label": "ml",
+      "dimension": "volume",
+      "factor": "1",
+      "offset": "0"
+    },
+    "l": {
+      "label": "l",
+      "dimension": "volume",
+      "factor": "1000",
+      "offset": "0"
+    },
+    "g": {
+      "label": "g",
+      "dimension": "mass",
+      "factor": "1",
+      "offset": "0"
+    },
+    "kg": {
+      "label": "kg",
+      "dimension": "mass",
+      "factor": "1000",
+      "offset": "0"
+    },
+    "v": {
+      "label": "V",
+      "dimension": "voltage",
+      "factor": "1",
+      "offset": "0"
+    },
+    "w": {
+      "label": "W",
+      "dimension": "power",
+      "factor": "1",
+      "offset": "0"
+    },
+    "a": {
+      "label": "A",
+      "dimension": "current",
+      "factor": "1",
+      "offset": "0"
+    },
+    "ah": {
+      "label": "Ah",
+      "dimension": "charge",
+      "factor": "1",
+      "offset": "0"
+    },
+    "hz": {
+      "label": "Hz",
+      "dimension": "frequency",
+      "factor": "1",
+      "offset": "0"
+    },
+    "celsius": {
+      "label": "°C",
+      "dimension": "temperature",
+      "factor": "1",
+      "offset": "273.15"
+    },
+    "kelvin": {
+      "label": "K",
+      "dimension": "temperature",
+      "factor": "1",
+      "offset": "0"
+    }
+  }
+}

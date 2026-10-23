@@ -118,6 +118,7 @@ jobs:
           tests/test_homebox_client.py
           tests/test_homebox_auth_live.py
           tests/test_homebox_upstream_live.py
+          tests/test_inventory_schema_live.py
           tests/test_companion_auth_live.py
           tests/test_label_print_live.py
           tests/test_mcp_tools.py
