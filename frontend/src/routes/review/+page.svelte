@@ -470,7 +470,7 @@
 				</div>
 			{/if}
 
-			<div class="space-y-5 p-4">
+			<fieldset class="min-w-0 space-y-5 p-4" disabled={isProcessing}>
 				<!-- Core fields: name, quantity, description -->
 				<ItemCoreFields
 					bind:name={editedItem.name}
@@ -530,7 +530,7 @@
 					onToggle={toggleAiCorrection}
 					onCorrect={handleAiCorrection}
 				/>
-			</div>
+			</fieldset>
 		</div>
 	{:else}
 		<div class="py-12 text-center text-neutral-500">

@@ -29,7 +29,7 @@ def gateway(monkeypatch):
         "manufacturer": "Control maker",
         "assetId": "000-001",
         "insured": True,
-        "syncChildEntityLocations": True,
+        "syncChildEntityLocations": False,
         "attachments": [{"id": "photo"}],
         "fields": [{"id": "field", "name": "Source", "type": "text", "textValue": "Label"}],
     }
@@ -122,3 +122,65 @@ async def test_update_keeps_parent_tags_and_unrelated_fields(gateway, parent):
     assert "attachments" not in payload
     for key in ("description", "quantity", "serialNumber", "manufacturer", "assetId", "insured", "fields"):
         assert payload[key] == gateway.get_item.return_value[key]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("location_id", [None, "elsewhere"])
+async def test_update_keeps_explicit_location_without_setting_inherited_location(gateway, location_id):
+    gateway.get_item.return_value["syncChildEntityLocations"] = False
+    gateway.get_item.return_value["location"] = {"id": "resolved-location"}
+    if location_id:
+        gateway.get_item.return_value["locationId"] = location_id
+    response = await send(gateway, "PUT", "/api/items/item", {"description": "Changed"})
+
+    assert response.status_code == 200
+    payload = gateway.update_item.await_args.args[1]
+    assert payload.get("locationId") == location_id
+    assert "location" not in payload
+
+
+@pytest.mark.asyncio
+async def test_update_does_not_change_child_location_settings(gateway):
+    gateway.get_item.return_value["syncChildEntityLocations"] = True
+    response = await send(gateway, "PUT", "/api/items/item", {"description": "Changed"})
+
+    assert response.status_code == 409
+    assert "Homebox" in response.json()["detail"]
+    gateway.update_item.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_keeps_zero_values_dates_flags_and_typed_fields(gateway):
+    stored = gateway.get_item.return_value
+    stored.update(
+        quantity=0,
+        archived=True,
+        purchasePrice=0,
+        soldPrice=0,
+        purchaseDate="2026-01-02",
+        soldDate="2026-02-03",
+        lifetimeWarranty=True,
+        warrantyExpires="",
+        warrantyDetails="Lifetime cover",
+        fields=[
+            {"id": "number", "name": "Count", "type": "number", "numberValue": 0},
+            {"id": "boolean", "name": "Used", "type": "boolean", "booleanValue": False},
+        ],
+    )
+    response = await send(gateway, "PUT", "/api/items/item", {"description": "Changed"})
+
+    assert response.status_code == 200
+    payload = gateway.update_item.await_args.args[1]
+    for key in (
+        "quantity",
+        "archived",
+        "purchasePrice",
+        "soldPrice",
+        "purchaseDate",
+        "soldDate",
+        "lifetimeWarranty",
+        "warrantyExpires",
+        "warrantyDetails",
+        "fields",
+    ):
+        assert payload[key] == stored[key]

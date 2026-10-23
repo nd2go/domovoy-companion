@@ -25,6 +25,12 @@ router = APIRouter()
 
 def _item_update_data(item: dict[str, Any]) -> dict[str, Any]:
     """Keep writable values from the current Homebox item."""
+    # Homebox PUT can remove child location overrides during child location sync.
+    if item.get("syncChildEntityLocations"):
+        raise HTTPException(
+            status_code=409,
+            detail="Use Homebox to change this item and keep the child locations.",
+        )
     data = {
         key: item[key]
         for key in (
@@ -49,6 +55,7 @@ def _item_update_data(item: dict[str, Any]) -> dict[str, Any]:
             "lifetimeWarranty",
             "warrantyExpires",
             "warrantyDetails",
+            "locationId",
         )
         if key in item
     }

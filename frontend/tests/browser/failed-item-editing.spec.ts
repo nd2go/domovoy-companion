@@ -170,6 +170,49 @@ async function openSummary(
 	await page.getByRole('button', { name: /Submit All Items/ }).click();
 }
 
+for (const rejected of [false, true]) {
+	test(`AI correction locks the form and restores it after ${rejected ? 'failure' : 'success'}`, async ({
+		page,
+	}) => {
+		let release!: () => void;
+		const pending = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		await openSummary(page, ['Control lamp'], [], {
+			beforeConfirm: async (page) => {
+				await page.route('**/api/tools/vision/correct', async (route) => {
+					await pending;
+					await route.fulfill(
+						rejected
+							? json({ detail: 'Control failure' }, 500)
+							: json({
+									items: [{ name: 'Control lamp', quantity: 1, description: 'Corrected' }],
+									message: 'Done',
+								})
+					);
+				});
+				await page.getByRole('button', { name: 'AI Correction', exact: true }).click();
+				await page.getByPlaceholder(/The brand is Sony/).fill('Correct the description.');
+				const requested = page.waitForRequest('**/api/tools/vision/correct');
+				await page.getByRole('button', { name: 'Correct with AI', exact: true }).click();
+				await requested;
+				try {
+					await expect(page.getByLabel('Name', { exact: true })).toBeDisabled();
+					await expect(page.getByRole('button', { name: 'Confirm', exact: true })).toBeDisabled();
+				} finally {
+					release();
+				}
+				await expect(page.getByLabel('Name', { exact: true })).toBeEnabled();
+				await expect(page.getByLabel('Description')).toHaveValue(
+					rejected ? 'Control lamp photo' : 'Corrected'
+				);
+				await page.getByLabel('Name', { exact: true }).fill('Manual lamp');
+			},
+		});
+		await expect(page).toHaveURL(/\/success$/);
+	});
+}
+
 for (const suggestedTags of [[], ['suggested-tag']]) {
 	test(`AI correction keeps selected fields and tags, suggestions=${suggestedTags.length}`, async ({
 		page,

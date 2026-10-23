@@ -1,0 +1,30 @@
+[
+  {
+    "case": "override",
+    "id": "f687d2e3-a8eb-4745-8d09-3f3b402cee71",
+    "before": {
+      "locationId": "ee62ceb1-4355-4b31-99b7-39f592efda59",
+      "syncChildEntityLocations": false
+    },
+    "after": {
+      "locationId": null,
+      "syncChildEntityLocations": false
+    },
+    "before_location": "ee62ceb1-4355-4b31-99b7-39f592efda59",
+    "after_location": "a16a66af-5f4e-4bf0-9045-1df97244c752"
+  },
+  {
+    "case": "sync",
+    "id": "130e253d-7acc-4c9b-8c44-946a99b4ff3c",
+    "before": {
+      "locationId": null,
+      "syncChildEntityLocations": true
+    },
+    "after": {
+      "locationId": null,
+      "syncChildEntityLocations": false
+    },
+    "before_location": "a16a66af-5f4e-4bf0-9045-1df97244c752",
+    "after_location": "a16a66af-5f4e-4bf0-9045-1df97244c752"
+  }
+]

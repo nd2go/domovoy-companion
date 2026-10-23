@@ -1,0 +1,37 @@
+[
+  {
+    "case": "explicit physical location retained",
+    "id": "f687d2e3-a8eb-4745-8d09-3f3b402cee71",
+    "locationId": "ee62ceb1-4355-4b31-99b7-39f592efda59",
+    "parent": "998b2978-91a2-4316-8518-a45863bfc926",
+    "passed": true
+  },
+  {
+    "case": "sync container update rejected without changing item or child",
+    "id": "130e253d-7acc-4c9b-8c44-946a99b4ff3c",
+    "child": "3dd9f2ec-69a1-4846-898f-38205a48ff12",
+    "status": 409,
+    "passed": true
+  },
+  {
+    "case": "plain",
+    "id": "f9fc1d0b-0d52-4000-9a94-22480012b351",
+    "parent": "998b2978-91a2-4316-8518-a45863bfc926",
+    "inherited_location_unpinned": true,
+    "passed": true
+  },
+  {
+    "case": "serial",
+    "id": "42e77031-3e5e-41a6-b368-2560d22f33ab",
+    "parent": "998b2978-91a2-4316-8518-a45863bfc926",
+    "inherited_location_unpinned": true,
+    "passed": true
+  },
+  {
+    "case": "location-only",
+    "id": "9783abe6-d867-4c7b-99c2-60aabb30a784",
+    "parent": "a16a66af-5f4e-4bf0-9045-1df97244c752",
+    "inherited_location_unpinned": true,
+    "passed": true
+  }
+]
