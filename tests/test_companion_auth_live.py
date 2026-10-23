@@ -54,6 +54,91 @@ async def companion_client(
 
 
 @pytest.mark.asyncio
+async def test_selected_box_and_fields_survive_creation_photos_and_update(
+    companion_client: tuple[httpx.AsyncClient, dict[str, str]],
+    homebox_auth: HomeboxAuth,
+    homebox_client: HomeboxClient,
+    cleanup_items: list[str],
+    cleanup_locations: list[str],
+    single_item_single_image_path,
+) -> None:
+    client, headers = companion_client
+    room = await client.post("/api/locations", headers=headers, json={"name": "SAVE00 room"})
+    assert room.status_code == 200
+    room_id = room.json()["id"]
+    cleanup_locations.append(room_id)
+    cabinet = await client.post(
+        "/api/locations", headers=headers, json={"name": "SAVE00 cabinet", "parent_id": room_id}
+    )
+    assert cabinet.status_code == 200
+    cabinet_id = cabinet.json()["id"]
+    cleanup_locations.append(cabinet_id)
+    box = await client.post(
+        "/api/items", headers=headers, json={"location_id": cabinet_id, "items": [{"name": "SAVE00 box"}]}
+    )
+    assert box.status_code == 200
+    box_id = box.json()["created"][0]["id"]
+    cleanup_items.append(box_id)
+    tag = await homebox_client.create_tag(homebox_auth.token, "SAVE00 control")
+    try:
+        for extra in ({}, {"serial_number": "SAVE00-1", "custom_fields": {"Source": "Label"}}):
+            created = await client.post(
+                "/api/items",
+                headers=headers,
+                json={
+                    "location_id": cabinet_id,
+                    "items": [{"name": "SAVE00 item", "parent_id": box_id, "tag_ids": [tag["id"]], **extra}],
+                },
+            )
+            assert created.status_code == 200
+            assert created.json()["errors"] == []
+            item_id = created.json()["created"][0]["id"]
+            cleanup_items.append(item_id)
+            before = await homebox_client.get_item(homebox_auth.token, item_id)
+            assert before["parent"]["id"] == box_id
+            assert {row["id"] for row in before["tags"]} == {tag["id"]}
+            if extra:
+                assert before["serialNumber"] == "SAVE00-1"
+                assert any(row["name"] == "Source" and row["textValue"] == "Label" for row in before["fields"])
+
+            for _ in range(2):
+                uploaded = await client.post(
+                    f"/api/items/{item_id}/attachments",
+                    headers=headers,
+                    files={"file": ("control.jpg", single_item_single_image_path.read_bytes(), "image/jpeg")},
+                )
+                assert uploaded.status_code == 200
+            updated = await client.put(f"/api/items/{item_id}", headers=headers, json={"name": "SAVE00 updated item"})
+            assert updated.status_code == 200
+            after = await homebox_client.get_item(homebox_auth.token, item_id)
+            assert after["parent"]["id"] == box_id
+            assert after["name"] == "SAVE00 updated item"
+            for key in ("tags", "fields", "serialNumber", "assetId"):
+                assert after[key] == before[key]
+            assert len(after["attachments"]) == 2
+            for attachment in after["attachments"]:
+                photo = await client.get(f"/api/items/{item_id}/attachments/{attachment['id']}", headers=headers)
+                assert photo.status_code == 200
+                assert photo.content
+
+        box_state = await homebox_client.get_item(homebox_auth.token, box_id)
+        assert box_state["parent"]["id"] == cabinet_id
+        cabinet_state = await homebox_client.get_item(homebox_auth.token, cabinet_id)
+        assert cabinet_state["parent"]["id"] == room_id
+
+        location_only = await client.post(
+            "/api/items", headers=headers, json={"location_id": cabinet_id, "items": [{"name": "SAVE00 location only"}]}
+        )
+        assert location_only.status_code == 200
+        location_item_id = location_only.json()["created"][0]["id"]
+        cleanup_items.append(location_item_id)
+        location_item = await homebox_client.get_item(homebox_auth.token, location_item_id)
+        assert location_item["parent"]["id"] == cabinet_id
+    finally:
+        await homebox_client.delete_tag(homebox_auth.token, tag["id"])
+
+
+@pytest.mark.asyncio
 async def test_connection_and_inventory_routes_share_the_selected_auth_context(
     companion_client: tuple[httpx.AsyncClient, dict[str, str]],
     homebox_auth: HomeboxAuth,

@@ -1,0 +1,67 @@
+{
+  "viewport": {
+    "width": 430,
+    "height": 932
+  },
+  "image": "sha256:a22532de9389940b4af46c5d58f22bb82b57604f2aa56d1d79f72e5dee6cdd30",
+  "vision": "mock detect/correct only",
+  "path": {
+    "room": "45bb08ea-ea62-4fbc-8b99-ab03273c2d8c",
+    "cabinet": "a16a66af-5f4e-4bf0-9045-1df97244c752",
+    "box": "998b2978-91a2-4316-8518-a45863bfc926"
+  },
+  "items": [
+    {
+      "kind": "plain",
+      "id": "e30d2ae0-9965-472e-a252-555770cf2ac7",
+      "parent": "998b2978-91a2-4316-8518-a45863bfc926",
+      "serial": "",
+      "fields": [],
+      "photos": [
+        {
+          "id": "c0a93566-a83a-44af-81cc-ce1c1738fe68",
+          "sha256": "65120ea673981a113dde86e572ba2ac758cd4a92bbbba78aac645afd19eebe93",
+          "bytes": 2608
+        }
+      ],
+      "preserved_after_update": true
+    },
+    {
+      "kind": "serial",
+      "id": "d79595b1-c5e3-44ab-bb28-86d58cc60910",
+      "parent": "998b2978-91a2-4316-8518-a45863bfc926",
+      "serial": "REVIEW-MOBILE-1",
+      "fields": [
+        {
+          "id": "52be48f8-cbf8-4d5a-956e-46de760d1d3e",
+          "type": "text",
+          "name": "Source",
+          "textValue": "Label",
+          "numberValue": 0,
+          "booleanValue": false
+        },
+        {
+          "id": "cfd12de6-7bfe-4145-8a19-1ad17814e0b7",
+          "type": "text",
+          "name": "Color",
+          "textValue": "Blue",
+          "numberValue": 0,
+          "booleanValue": false
+        }
+      ],
+      "photos": [
+        {
+          "id": "d80e2881-e2e3-4b74-8367-1d5be1420211",
+          "sha256": "65120ea673981a113dde86e572ba2ac758cd4a92bbbba78aac645afd19eebe93",
+          "bytes": 2608
+        }
+      ],
+      "preserved_after_update": true
+    }
+  ],
+  "notes": [
+    "One plain and one extended submission with Scan More between them",
+    "One of two initial drafts was skipped; each confirmed card retained one original photo",
+    "Original checksums match independent Homebox and Companion downloads"
+  ]
+}

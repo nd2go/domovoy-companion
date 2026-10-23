@@ -1,0 +1,35 @@
+{
+  "homebox_build": {
+    "version": "v0.27.0",
+    "commit": "bae3fb4e9b84672e4e64da15e57a14217aea7c13",
+    "buildTime": ""
+  },
+  "hierarchy": {
+    "room": "76773125-f456-4531-b9e5-571981812ce2",
+    "cabinet": "f127aef0-1e6d-4ba4-8882-e16e5c44cda9",
+    "box": "104d6f62-c106-4ef5-93ad-bfb404245c2e"
+  },
+  "items": [
+    {
+      "name": "plain",
+      "id": "d9147424-3636-4212-bebf-6ccd05af4b6c",
+      "parent": "f127aef0-1e6d-4ba4-8882-e16e5c44cda9",
+      "expected_parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "pass": false
+    },
+    {
+      "name": "serial",
+      "id": "d539ebcc-8a29-42f3-a7fb-d56c1537ac6b",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "expected_parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "pass": true
+    },
+    {
+      "name": "custom",
+      "id": "8a46c158-7847-445a-930e-dc225c36bdcf",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "expected_parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "pass": true
+    }
+  ]
+}
