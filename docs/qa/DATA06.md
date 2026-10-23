@@ -16,6 +16,8 @@ The API is mocked in these browser tests. They do not prove real recognition or 
 
 Svelte check and ESLint passed. The changed server's Python, Ruff, ty and Vulture checks passed.
 The schema live test passed with real disposable Homebox under session and configured API-key authentication.
+The combined server and editor passed 413 non-live tests and the complete 64-test live selection.
+The library and packaged seed have the same SHA-256.
 A separate headed Chrome check used the changed app and real disposable Homebox.
 It created, previewed and applied a new category. It also captured a synthetic image, selected a category, validated a size in a different unit and saved the item with its extra owner field. Only recognition was mocked in that flow. Desktop and mobile-width screenshots were inspected.
 No model call, physical phone, printer, published QA, or owner inventory was used.
@@ -44,7 +46,9 @@ Preview lists added and changed definitions before apply.
 Real iPhone and Android checks have not run. Keep DATA06 open and its PR in draft until they pass.
 The new AI proposal stage is DATA07. It still depends on the open AI02 task.
 Post-merge regression also exposed an intermittent photo-count failure in the pinned Homebox boundary.
-That finding is being diagnosed separately; it is not a schema test pass.
+Companion PR #30 corrects the sequence and detects false upload success. It is merged as `f8daa74`.
+The combined checks above include that correction.
+Required physical-phone acceptance still prevents merging this editor PR under the project workflow.
 
 ## Pending phone checklist
 
