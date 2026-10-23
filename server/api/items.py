@@ -23,6 +23,40 @@ from ..schemas.items import BatchCreateRequest
 router = APIRouter()
 
 
+def _item_update_data(item: dict[str, Any]) -> dict[str, Any]:
+    """Keep writable values from the current Homebox item."""
+    data = {
+        key: item[key]
+        for key in (
+            "name",
+            "description",
+            "quantity",
+            "assetId",
+            "insured",
+            "archived",
+            "manufacturer",
+            "modelNumber",
+            "serialNumber",
+            "notes",
+            "fields",
+            "purchaseDate",
+            "purchaseFrom",
+            "purchasePrice",
+            "soldDate",
+            "soldTo",
+            "soldPrice",
+            "soldNotes",
+            "lifetimeWarranty",
+            "warrantyExpires",
+            "warrantyDetails",
+        )
+        if key in item
+    }
+    data["parentId"] = (item.get("parent") or {}).get("id")
+    data["tagIds"] = [tag["id"] for tag in item.get("tags", []) if tag.get("id")]
+    return data
+
+
 @router.get("/items")
 async def list_items(
     gateway: Annotated[HomeboxGateway, Depends(get_gateway)],
@@ -74,9 +108,8 @@ async def create_items(
     valid_tag_ids = await get_valid_tag_ids(gateway)
 
     for index, item_input in enumerate(request.items):
-        # Resolve parent (container) ID: item-level → request-level fallback
-        # In 0.26, location_id and parent_id both map to the API's parentId field
-        parent_id = item_input.location_id or request.location_id or item_input.parent_id
+        # Use the selected item container before either location fallback.
+        parent_id = item_input.parent_id or item_input.location_id or request.location_id
 
         logger.debug(f"Creating item: {item_input.name}")
         logger.debug(f"  parent_id: {parent_id}")
@@ -126,27 +159,20 @@ async def create_items(
                     try:
                         # Get the full item to merge with extended fields
                         full_item = await gateway.get_item(item_id)
-                        # Merge extended fields into the full item data
-                        update_data = {
-                            "name": full_item.get("name"),
-                            "description": full_item.get("description"),
-                            "quantity": full_item.get("quantity"),
-                            "parentId": full_item.get("parent", {}).get("id"),
-                            "tagIds": [tag.get("id") for tag in full_item.get("tags", []) if tag.get("id")],
-                            **extended_payload,
-                        }
+                        update_data = {**_item_update_data(full_item), **extended_payload}
                         # Include custom fields as typed Homebox ItemField objects
                         if item_input.custom_fields:
                             from homebox_companion.tools.vision.models import HomeboxItemField
 
-                            update_data["fields"] = [
-                                HomeboxItemField(name=name, textValue=value).model_dump(by_alias=True)
+                            new_fields = {
+                                name: HomeboxItemField(name=name, textValue=value).model_dump(by_alias=True)
                                 for name, value in item_input.custom_fields.items()
-                                if value  # skip empty/null values
-                            ]
-                        # Preserve parentId if it was set
-                        if item_input.parent_id:
-                            update_data["parentId"] = item_input.parent_id
+                                if value
+                            }
+                            fields = []
+                            for field in full_item.get("fields", []):
+                                fields.append({**field, **new_fields.pop(field["name"], {})})
+                            update_data["fields"] = fields + list(new_fields.values())
                         result = await gateway.update_item(item_id, update_data)
                         logger.info("  Updated item with extended fields")
                     except HomeboxAuthError:
@@ -291,13 +317,7 @@ async def update_item(
     full_item = await gateway.get_item(item_id)
 
     # Build update payload with current values + updates
-    update_data = {
-        "name": full_item.get("name"),
-        "description": full_item.get("description", ""),
-        "quantity": full_item.get("quantity", 1),
-        "parentId": full_item.get("parent", {}).get("id"),
-        "tagIds": [tag.get("id") for tag in full_item.get("tags", []) if tag.get("id")],
-    }
+    update_data = _item_update_data(full_item)
 
     # Apply requested updates (convert snake_case to camelCase for Homebox API)
     if "assetId" in request:

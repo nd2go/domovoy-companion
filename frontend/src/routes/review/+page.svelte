@@ -318,15 +318,17 @@
 					...editedItem,
 					name: corrected.name,
 					quantity: corrected.quantity,
-					description: corrected.description ?? null,
-					tag_ids: corrected.tag_ids ?? null,
-					manufacturer: corrected.manufacturer ?? null,
-					model_number: corrected.model_number ?? null,
-					serial_number: corrected.serial_number ?? null,
-					purchase_price: corrected.purchase_price ?? null,
-					purchase_from: corrected.purchase_from ?? null,
-					notes: corrected.notes ?? null,
-					custom_fields: corrected.custom_fields ?? editedItem.custom_fields,
+					description: corrected.description ?? editedItem.description,
+					tag_ids: [...new Set([...(editedItem.tag_ids ?? []), ...(corrected.tag_ids ?? [])])],
+					manufacturer: corrected.manufacturer ?? editedItem.manufacturer,
+					model_number: corrected.model_number ?? editedItem.model_number,
+					serial_number: corrected.serial_number ?? editedItem.serial_number,
+					purchase_price: corrected.purchase_price ?? editedItem.purchase_price,
+					purchase_from: corrected.purchase_from ?? editedItem.purchase_from,
+					notes: corrected.notes ?? editedItem.notes,
+					custom_fields: corrected.custom_fields
+						? { ...editedItem.custom_fields, ...corrected.custom_fields }
+						: editedItem.custom_fields,
 				};
 
 				// Visual feedback is sufficient - form updates are visible

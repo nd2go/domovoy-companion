@@ -1,0 +1,22 @@
+[
+  {
+    "case": "anonymous POST",
+    "status": 401
+  },
+  {
+    "case": "anonymous PUT",
+    "status": 401
+  },
+  {
+    "case": "invalid parent",
+    "created": 0
+  },
+  {
+    "case": "foreign parent",
+    "created": 0
+  },
+  {
+    "case": "foreign item update",
+    "status": 502
+  }
+]

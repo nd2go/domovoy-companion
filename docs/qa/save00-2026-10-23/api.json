@@ -1,0 +1,37 @@
+{
+  "items": [
+    {
+      "name": "plain",
+      "id": "4c567710-5e44-4680-a976-fa0ef25e0517",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "preserved_fields": true
+    },
+    {
+      "name": "serial",
+      "id": "297f6213-293a-4b31-9050-b036e1748307",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "preserved_fields": true
+    },
+    {
+      "name": "custom",
+      "id": "625e4587-a7c8-4fe1-9d5a-7e14e3d02795",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "preserved_fields": true
+    },
+    {
+      "name": "location-only",
+      "id": "d98937d8-12ed-4c9a-91e7-ba7cff0c3d18",
+      "parent": "f127aef0-1e6d-4ba4-8882-e16e5c44cda9",
+      "preserved_fields": true
+    }
+  ],
+  "checks": [
+    "box precedence",
+    "location-only fallback",
+    "parent retained on update",
+    "tags retained",
+    "custom field IDs retained",
+    "serial/manufacturer retained",
+    "asset ID retained"
+  ]
+}

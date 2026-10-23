@@ -1,0 +1,93 @@
+{
+  "environment": {
+    "homebox": {
+      "version": "v0.27.0",
+      "commit": "bae3fb4e9b84672e4e64da15e57a14217aea7c13",
+      "buildTime": ""
+    },
+    "companion_image": "sha256:1d1b44f83784782fa15e43f23707720a6ef11c6f30fb0e1cf94d5145909e5880",
+    "viewport": {
+      "width": 430,
+      "height": 932
+    },
+    "ai": "Mock detect/correct responses; no real provider call"
+  },
+  "hierarchy": {
+    "room": "76773125-f456-4531-b9e5-571981812ce2",
+    "cabinet": "f127aef0-1e6d-4ba4-8882-e16e5c44cda9",
+    "box": "104d6f62-c106-4ef5-93ad-bfb404245c2e"
+  },
+  "items": [
+    {
+      "kind": "plain",
+      "id": "755cf4fd-cb62-43c8-8e54-a9bf2ffe42db",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "tag_ids": [
+        "90eea866-da8a-42b8-99a7-967484eb7344"
+      ],
+      "serial_number": "",
+      "fields": [],
+      "photos": [
+        {
+          "id": "bb767292-9ae2-4a10-be2f-6272315534eb",
+          "sha256": "eb2c0f2d2eed18e1c036173d14e4f312d65e8dead3ad7574f5dd0b6e42e06d34",
+          "bytes": 2517
+        },
+        {
+          "id": "470bcf64-6b43-4287-8370-c06a8cc13ed7",
+          "sha256": "65120ea673981a113dde86e572ba2ac758cd4a92bbbba78aac645afd19eebe93",
+          "bytes": 2608
+        }
+      ],
+      "preserved_after_independent_update": true
+    },
+    {
+      "kind": "serial",
+      "id": "0896e6d4-e4ac-4a29-93df-c356485a13c8",
+      "parent": "104d6f62-c106-4ef5-93ad-bfb404245c2e",
+      "tag_ids": [
+        "90eea866-da8a-42b8-99a7-967484eb7344"
+      ],
+      "serial_number": "SAVE00-MOBILE-1",
+      "fields": [
+        {
+          "id": "1443a2ba-4b6b-40d5-ab8a-2cb3208e141f",
+          "type": "text",
+          "name": "Source",
+          "textValue": "Synthetic label",
+          "numberValue": 0,
+          "booleanValue": false
+        },
+        {
+          "id": "644235e4-b1f0-4a28-a527-87f5320a4f77",
+          "type": "text",
+          "name": "Control",
+          "textValue": "Changed",
+          "numberValue": 0,
+          "booleanValue": false
+        }
+      ],
+      "photos": [
+        {
+          "id": "b6b3ad5a-aa58-4538-a225-1c45e2202d39",
+          "sha256": "65120ea673981a113dde86e572ba2ac758cd4a92bbbba78aac645afd19eebe93",
+          "bytes": 2608
+        }
+      ],
+      "preserved_after_independent_update": true
+    }
+  ],
+  "checks": [
+    "one item of each kind",
+    "parent and full storage path",
+    "selected tag after AI correction",
+    "known serial after null AI response",
+    "unrelated custom field retained",
+    "partial custom correction applied",
+    "two original photos for plain item",
+    "one original photo for serial item",
+    "both attachment APIs match SHA256",
+    "post-save edit retains fields and attachment IDs",
+    "Scan More keeps selected box"
+  ]
+}
