@@ -1,6 +1,6 @@
 ---
 name: human-code-review
-description: Review code changes or a requested code audit in separate passes for correctness, edge cases, useful tests, resource use, and clear English. Use for code review, not routine implementation or a security audit.
+description: Review code changes or a requested code audit for correctness, edge cases, useful tests, resource use, security of external input, and clear English. Use for code review, not routine implementation or a standalone security audit.
 ---
 
 # Human Code Review
@@ -21,8 +21,10 @@ Complete each pass. Re-read the relevant code with that pass's purpose. A repeat
 1. **Logic and contracts.** Trace inputs through state changes and outputs. Check errors, partial success, data ownership, and external side effects.
 2. **Edge cases.** Check empty, missing, malformed, large, and boundary inputs. Check duplicate delivery, concurrent actions, cancellation, timeout, and restart where applicable.
 3. **Tests.** Check whether tests prove observable behavior and important failure paths. Look for weak assertions, excessive mocks, flaky timing, and duplicate coverage.
-4. **CPU and memory.** Trace loops, queries, copies, image buffers, caches, queues, streams, timers, subscriptions, and cleanup. Check bounds and object lifetimes.
-5. **Readability and language.** Check names, control flow, necessary comments, and English prose. Apply the STE check below.
+4. **Security and abuse.** Identify external input and affected trust boundaries. When present, complete [the security input review](references/security-inputs.md).
+   Include authorization bypass, injection, data exposure, and deliberate resource exhaustion. If none is affected, state why this pass is not applicable.
+5. **CPU and memory.** Trace loops, queries, copies, image buffers, caches, queues, streams, timers, subscriptions, and cleanup. Check bounds and object lifetimes.
+6. **Readability and language.** Check names, control flow, necessary comments, and English prose. Apply the STE check below.
 
 For a suspected defect, state the trigger and expected result. Confirm it with a focused test or a source path that demonstrates failure.
 When changes arrive, review the new diff and affected paths again. Check whether each finding is resolved.
@@ -65,5 +67,6 @@ The language of the conversation remains the user's choice.
 Give each actionable finding a priority, file location, trigger, impact, and proposed correction. Keep inline comments limited to necessary findings.
 Combine repeated findings with the same cause. Omit praise, speculative warnings, and style comments without a clear benefit.
 Separate defects from optional cleanup. For a large cleanup, propose one bounded task with concrete examples and acceptance checks.
-State the commands run, results, pass coverage, and remaining limits. State when no actionable defect was found.
+State the commands run, results, pass coverage, and remaining limits. Include security evidence for each affected input path.
+Distinguish checks that ran from proposed CI automation. Scanner output does not replace input-path review. State when no actionable defect was found.
 Do not imply that a static audit proves runtime behavior or the absence of all bugs.
