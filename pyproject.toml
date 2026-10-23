@@ -46,6 +46,9 @@ homebox-companion = "server.app:run"
 where = ["src", "."]
 include = ["homebox_companion*", "server*"]
 
+[tool.setuptools.package-data]
+homebox_companion = ["inventory_schema_seed.json"]
+
 [tool.setuptools.package-dir]
 "" = "src"
 "server" = "server"

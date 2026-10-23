@@ -19,6 +19,7 @@ from homebox_companion.homebox import ItemCreate
 
 from ..dependencies import get_gateway, get_valid_tag_ids, validate_file_size
 from ..schemas.items import BatchCreateRequest
+from .inventory_schema import check_submission
 
 router = APIRouter()
 
@@ -105,6 +106,7 @@ async def create_items(
     any extended fields since the Homebox API only accepts extended fields
     via update, not create.
     """
+    await check_submission(gateway, request.items)
     logger.info(f"Creating {len(request.items)} items")
     logger.debug(f"Request location_id: {request.location_id}")
 
