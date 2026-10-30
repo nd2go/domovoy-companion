@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "request_id": "00000000-0000-0000-0000-000000000002",
+  "backend": "codex_cli",
+  "model": null,
+  "system_prompt": "Describe the visible item. Unknown values stay unknown.",
+  "user_prompt": "Return the requested JSON.",
+  "image_data_uris": [
+    "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+  ],
+  "response_schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "quantity": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "required": [
+      "name",
+      "quantity"
+    ],
+    "additionalProperties": false
+  },
+  "expected_keys": [],
+  "timeout_seconds": 120.0
+}

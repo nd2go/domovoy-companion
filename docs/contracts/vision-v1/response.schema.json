@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "VisionDiagnostics": {
+      "additionalProperties": false,
+      "description": "Keep optional execution timing separate from provider text.",
+      "properties": {
+        "elapsed_ms": {
+          "anyOf": [
+            {
+              "maximum": 300000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Ms"
+        }
+      },
+      "title": "VisionDiagnostics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Correlate structured data with one request and backend.",
+  "properties": {
+    "version": {
+      "const": "1",
+      "default": "1",
+      "title": "Version",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "backend": {
+      "enum": [
+        "litellm",
+        "codex_cli",
+        "claude_cli"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "diagnostics": {
+      "$ref": "#/$defs/VisionDiagnostics"
+    }
+  },
+  "required": [
+    "request_id",
+    "backend",
+    "data"
+  ],
+  "title": "VisionResponse",
+  "type": "object"
+}

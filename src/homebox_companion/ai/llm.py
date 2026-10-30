@@ -14,14 +14,17 @@ Public API:
 from __future__ import annotations
 
 from typing import Any
+from uuid import UUID
 
 from loguru import logger
 from pydantic import BaseModel
 
 from ..core import config
 from ..core.exceptions import CapabilityNotSupportedError, LLMServiceError
+from . import vision_backend
 from .json_completion import json_completion
 from .model_capabilities import get_model_capabilities
+from .vision_contract import MAX_RESULT_BYTES, VisionBackendError, VisionRequest
 
 
 def _resolve_model_for_capabilities() -> str | None:
@@ -79,13 +82,14 @@ async def chat_completion(
     )
 
 
-async def vision_completion(
+async def _litellm_vision_completion(
     system_prompt: str,
     user_prompt: str,
     image_data_uris: list[str],
     *,
     expected_keys: list[str] | None = None,
     response_model: type[BaseModel] | None = None,
+    timeout: float | None = None,
 ) -> dict[str, Any]:
     """Send a vision completion request with images to the LLM.
 
@@ -206,4 +210,37 @@ async def vision_completion(
         messages,
         response_format=response_format,
         expected_keys=expected_keys,
+        timeout=timeout,
+        max_response_bytes=MAX_RESULT_BYTES,
     )
+
+
+async def vision_completion(
+    system_prompt: str,
+    user_prompt: str,
+    image_data_uris: list[str],
+    *,
+    expected_keys: list[str] | None = None,
+    response_model: type[BaseModel] | None = None,
+    request_id: UUID | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Run the selected adapter through the shared version 1 contract."""
+    if not image_data_uris:
+        raise ValueError("vision_completion requires at least one image")
+    backend = vision_backend.get_vision_backend(response_model)
+    try:
+        request = VisionRequest(
+            backend=backend.kind,
+            model=backend.model,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            image_data_uris=image_data_uris,
+            response_schema=response_model.model_json_schema() if response_model else None,
+            expected_keys=expected_keys or [],
+            timeout_seconds=config.settings.llm_timeout if timeout_seconds is None else timeout_seconds,
+            **({"request_id": request_id} if request_id is not None else {}),
+        )
+    except ValueError, TypeError, RecursionError:
+        raise VisionBackendError("invalid_input") from None
+    return await vision_backend.run_vision(request, backend, response_model)

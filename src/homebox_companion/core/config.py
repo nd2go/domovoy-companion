@@ -41,6 +41,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -114,6 +115,8 @@ class Settings(BaseSettings):
 
     # Image processing configuration
     image_quality: ImageQuality = ImageQuality.MEDIUM
+
+    vision_backend: Literal["litellm", "codex_cli", "claude_cli"] = "litellm"
 
     # LLM request timeout (in seconds)
     llm_timeout: int = 120

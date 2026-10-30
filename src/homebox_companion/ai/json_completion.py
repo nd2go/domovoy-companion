@@ -216,6 +216,7 @@ async def json_completion(
     response_format: dict[str, Any] | type[BaseModel] | None = None,
     expected_keys: list[str] | None = None,
     timeout: float | None = None,
+    max_response_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Make an LLM completion request expecting JSON output.
 
@@ -229,6 +230,7 @@ async def json_completion(
             for structured output (json_schema), or None.
         expected_keys: Keys to check in JSON response (triggers repair if missing).
         timeout: Optional timeout override (uses config default if None).
+        max_response_bytes: Optional vision response limit before JSON parsing.
 
     Returns:
         Parsed JSON response as a dictionary.
@@ -264,6 +266,11 @@ async def json_completion(
     if raw_content is None:
         logger.warning("LLM returned None content, defaulting to empty JSON object")
         raw_content = "{}"
+
+    if max_response_bytes is not None and (
+        len(raw_content) > max_response_bytes or len(raw_content.encode()) > max_response_bytes
+    ):
+        raise LLMServiceError("Vision response exceeds the byte limit")
 
     # Get actual model used (for logging)
     actual_model = getattr(completion, "_hidden_params", {}).get("model", model_name)
@@ -315,6 +322,11 @@ async def json_completion(
     if repaired_content is None:
         logger.warning("LLM returned None content during repair, defaulting to empty JSON object")
         repaired_content = "{}"
+
+    if max_response_bytes is not None and (
+        len(repaired_content) > max_response_bytes or len(repaired_content.encode()) > max_response_bytes
+    ):
+        raise LLMServiceError("Vision repair response exceeds the byte limit")
 
     logger.trace(f"<<< REPAIR RESPONSE FROM LLM <<<\n{'=' * 60}\n{repaired_content}\n{'=' * 60}")
 

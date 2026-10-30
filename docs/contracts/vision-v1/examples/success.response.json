@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "request_id": "00000000-0000-0000-0000-000000000002",
+  "backend": "codex_cli",
+  "data": {
+    "name": "Control item",
+    "quantity": 1
+  },
+  "diagnostics": {
+    "elapsed_ms": null
+  }
+}

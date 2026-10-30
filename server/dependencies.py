@@ -414,33 +414,15 @@ def require_auth(user: Annotated[dict[str, object], Depends(get_authenticated_us
     _ = user
 
 
-def require_llm_configured() -> str:
-    """
-    FastAPI dependency to ensure LLM is configured.
+async def require_vision_ready() -> None:
+    """Check the selected vision backend before image analysis."""
+    from homebox_companion.ai.vision_backend import get_vision_backend
+    from homebox_companion.ai.vision_contract import VisionBackendError
 
-    Use this as a FastAPI dependency in endpoints that require LLM access.
-    The returned key can be used directly or ignored if only validation is needed.
-
-    Resolution order (same as LLM Router):
-    1. PRIMARY profile from settings.yaml (configured via Settings UI)
-    2. Environment variables (HBC_LLM_API_KEY or HBC_OPENAI_API_KEY)
-
-    Returns:
-        The configured LLM API key.
-
-    Raises:
-        HTTPException: 500 if LLM API key is not configured.
-    """
-    from homebox_companion.core.llm_utils import resolve_llm_credentials
-
-    creds = resolve_llm_credentials()
-    if not creds.api_key:
-        logger.error("LLM API key not configured")
-        raise HTTPException(
-            status_code=500,
-            detail="LLM API key not configured. Configure a profile in Settings or set HBC_LLM_API_KEY.",
-        )
-    return creds.api_key
+    backend = get_vision_backend()
+    state = await backend.readiness()
+    if state.backend != backend.kind or not state.ready:
+        raise VisionBackendError("not_ready")
 
 
 async def validate_file_size(file: UploadFile) -> bytes:

@@ -1,0 +1,94 @@
+{
+  "additionalProperties": false,
+  "description": "Carry photos and a schema without paths, commands, or credentials.",
+  "properties": {
+    "version": {
+      "const": "1",
+      "default": "1",
+      "title": "Version",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "backend": {
+      "enum": [
+        "litellm",
+        "codex_cli",
+        "claude_cli"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "model": {
+      "anyOf": [
+        {
+          "maxLength": 256,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model"
+    },
+    "system_prompt": {
+      "maxLength": 65536,
+      "title": "System Prompt",
+      "type": "string"
+    },
+    "user_prompt": {
+      "maxLength": 65536,
+      "title": "User Prompt",
+      "type": "string"
+    },
+    "image_data_uris": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Image Data Uris",
+      "type": "array"
+    },
+    "response_schema": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Response Schema"
+    },
+    "expected_keys": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Expected Keys",
+      "type": "array"
+    },
+    "timeout_seconds": {
+      "default": 120,
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "title": "Timeout Seconds",
+      "type": "number"
+    }
+  },
+  "required": [
+    "backend",
+    "system_prompt",
+    "user_prompt",
+    "image_data_uris"
+  ],
+  "title": "VisionRequest",
+  "type": "object"
+}

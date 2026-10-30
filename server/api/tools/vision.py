@@ -25,7 +25,7 @@ from homebox_companion.tools.vision.models import get_custom_fields_dict
 from ...dependencies import (
     VisionContext,
     get_vision_context,
-    require_llm_configured,
+    require_vision_ready,
     validate_file_size,
     validate_files_size,
 )
@@ -107,7 +107,7 @@ def filter_default_tag(tag_ids: list[str] | None, default_tag_id: str | None) ->
 async def detect_items(
     image: Annotated[UploadFile, File(description="Primary image file to analyze")],
     ctx: Annotated[VisionContext, Depends(get_vision_context)],
-    api_key: Annotated[str, Depends(require_llm_configured)],
+    _vision_ready: Annotated[None, Depends(require_vision_ready)],
     single_item: Annotated[bool, Form()] = False,
     extra_instructions: Annotated[str | None, Form()] = None,
     extract_extended_fields: Annotated[bool, Form()] = True,
@@ -120,7 +120,7 @@ async def detect_items(
     Args:
         image: The primary image file to analyze.
         ctx: Vision context with auth token, tags, and preferences.
-        api_key: LLM API key (validated by dependency).
+        _vision_ready: The selected vision backend is ready.
         single_item: If True, treat everything as a single item.
         extra_instructions: Optional user hint about what's in the image.
         extract_extended_fields: If True, also extract extended fields.
@@ -247,7 +247,7 @@ async def analyze_item_advanced(
     images: Annotated[list[UploadFile], File(description="Images to analyze")],
     item_name: Annotated[str, Form()],
     ctx: Annotated[VisionContext, Depends(get_vision_context)],
-    api_key: Annotated[str, Depends(require_llm_configured)],
+    _vision_ready: Annotated[None, Depends(require_vision_ready)],
     item_description: Annotated[str | None, Form()] = None,
 ) -> AdvancedItemDetails:
     """Analyze multiple images to extract detailed item information."""
@@ -302,7 +302,7 @@ async def correct_item(
     current_item: Annotated[str, Form(description="JSON string of current item")],
     correction_instructions: Annotated[str, Form(description="User's correction feedback")],
     ctx: Annotated[VisionContext, Depends(get_vision_context)],
-    api_key: Annotated[str, Depends(require_llm_configured)],
+    _vision_ready: Annotated[None, Depends(require_vision_ready)],
 ) -> CorrectionResponse:
     """Correct an item based on user feedback.
 

@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "description": "Describe a wire failure without free-form provider diagnostics.",
+  "properties": {
+    "version": {
+      "const": "1",
+      "default": "1",
+      "title": "Version",
+      "type": "string"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "backend": {
+      "enum": [
+        "litellm",
+        "codex_cli",
+        "claude_cli"
+      ],
+      "title": "Backend",
+      "type": "string"
+    },
+    "code": {
+      "enum": [
+        "not_ready",
+        "timeout",
+        "invalid_input",
+        "invalid_response",
+        "provider_failed"
+      ],
+      "title": "Code",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "backend",
+    "code"
+  ],
+  "title": "VisionFailure",
+  "type": "object"
+}
