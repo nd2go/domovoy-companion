@@ -112,6 +112,7 @@ export const getVersion = (forceCheck: boolean = false) =>
 // =============================================================================
 
 export interface ConfigResponse {
+	vision_backend?: VisionBackend;
 	auth_mode: 'legacy' | 'api_key';
 	is_demo_mode: boolean;
 	/** Explicit demo mode from HBC_DEMO_MODE env var only (not URL detection) */
@@ -278,10 +279,24 @@ export const fieldPreferences = {
 // =============================================================================
 
 export type ProfileStatus = 'primary' | 'fallback' | 'off';
+export type VisionBackend = 'litellm' | 'codex_cli';
+
+export interface VisionReadiness {
+	backend: VisionBackend;
+	model: string | null;
+	ready: boolean;
+	reason: string | null;
+	message?: string;
+	profile_revision: string;
+	timeout_seconds: number;
+	max_parallelism: number;
+	chat_available: boolean;
+}
 
 export interface LLMProfile {
 	name: string;
 	model: string;
+	backend?: VisionBackend;
 	has_api_key: boolean;
 	api_base: string | null;
 	status: ProfileStatus;
@@ -290,6 +305,7 @@ export interface LLMProfile {
 export interface LLMProfileCreate {
 	name: string;
 	model: string;
+	backend?: VisionBackend;
 	api_key?: string | null;
 	api_base?: string | null;
 	status?: ProfileStatus;
@@ -298,6 +314,7 @@ export interface LLMProfileCreate {
 export interface LLMProfileUpdate {
 	new_name?: string | null;
 	model?: string | null;
+	backend?: VisionBackend;
 	api_key?: string | null;
 	api_base?: string | null;
 	status?: ProfileStatus | null;
@@ -313,6 +330,7 @@ export interface TestConnectionResponse {
 }
 
 export const llmProfiles = {
+	readiness: () => request<VisionReadiness>('/llm/readiness', { timeout: 20000 }),
 	/** List all LLM profiles (API keys masked) */
 	list: () => request<{ profiles: LLMProfile[] }>('/llm/profiles'),
 

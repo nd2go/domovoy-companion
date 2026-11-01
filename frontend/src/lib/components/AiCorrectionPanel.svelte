@@ -8,17 +8,16 @@
 		expanded: boolean;
 		loading: boolean;
 		onToggle: () => void;
-		onCorrect: (prompt: string) => void;
+		onCorrect: (prompt: string) => Promise<boolean>;
 	}
 
 	let { expanded, loading, onToggle, onCorrect }: Props = $props();
 
 	let correctionPrompt = $state('');
 
-	function handleCorrect() {
+	async function handleCorrect() {
 		if (correctionPrompt.trim()) {
-			onCorrect(correctionPrompt);
-			correctionPrompt = '';
+			if (await onCorrect(correctionPrompt)) correctionPrompt = '';
 		}
 	}
 </script>

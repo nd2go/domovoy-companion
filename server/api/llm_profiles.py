@@ -4,12 +4,21 @@ CRUD operations for LLM model profiles with connection testing.
 API keys are never sent to the frontend - only `has_api_key: bool` is exposed.
 """
 
+import asyncio
+from dataclasses import replace
+from typing import Literal
+
 import litellm
 from fastapi import APIRouter, Depends, HTTPException
 from litellm.exceptions import APIConnectionError, AuthenticationError, NotFoundError
 from loguru import logger
 from pydantic import BaseModel, SecretStr
 
+from homebox_companion.ai.vision_backend import get_vision_backend
+from homebox_companion.ai.vision_contract import VisionBackendError
+from homebox_companion.ai.vision_profiles import current_profile, profile_backend, resolve_vision_profile
+from homebox_companion.ai.worker_client import CodexBackend
+from homebox_companion.core import config
 from homebox_companion.core.persistent_settings import (
     ModelProfile,
     PersistentSettings,
@@ -34,6 +43,7 @@ class ProfileResponse(BaseModel):
 
     name: str
     model: str
+    backend: str
     has_api_key: bool
     api_base: str | None
     status: str
@@ -49,10 +59,11 @@ class ProfileCreateRequest(BaseModel):
     """Request to create a new profile."""
 
     name: str
-    model: str
+    model: str = ""
+    backend: Literal["litellm", "codex_cli"] | None = None
     api_key: str | None = None
     api_base: str | None = None
-    status: str = "off"
+    status: ProfileStatus = ProfileStatus.OFF
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -65,9 +76,10 @@ class ProfileUpdateRequest(BaseModel):
 
     new_name: str | None = None
     model: str | None = None
+    backend: Literal["litellm", "codex_cli"] | None = None
     api_key: str | None = None
     api_base: str | None = None
-    status: str | None = None
+    status: ProfileStatus | None = None
 
 
 class TestConnectionRequest(BaseModel):
@@ -75,6 +87,7 @@ class TestConnectionRequest(BaseModel):
 
     # Optional override for testing before saving
     model: str | None = None
+    backend: Literal["litellm", "codex_cli"] | None = None
     api_key: str | None = None
     api_base: str | None = None
 
@@ -97,8 +110,9 @@ def _profile_to_response(profile: ModelProfile) -> ProfileResponse:
     return ProfileResponse(
         name=profile.name,
         model=profile.model,
-        has_api_key=profile.api_key is not None,
-        api_base=profile.api_base,
+        backend=profile_backend(profile),
+        has_api_key=profile.api_key is not None and profile_backend(profile) == "litellm",
+        api_base=profile.api_base if profile_backend(profile) == "litellm" else None,
         status=profile.status.value,
     )
 
@@ -109,6 +123,43 @@ def _find_profile(settings: PersistentSettings, name: str) -> tuple[int, ModelPr
         if p.name == name:
             return i, p
     raise HTTPException(status_code=404, detail=f"Profile '{name}' not found")
+
+
+def _save_checked(settings: PersistentSettings) -> None:
+    try:
+        checked = PersistentSettings.model_validate(settings.model_dump())
+    except ValueError:
+        raise HTTPException(422, "Invalid AI profile settings. Codex cannot be a fallback profile.") from None
+    save_settings(checked)
+
+
+@router.get("/llm/readiness")
+async def active_readiness() -> dict:
+    """Check configuration and host login without a model request."""
+    profile = resolve_vision_profile()
+    token = current_profile.set(profile)
+    try:
+        try:
+            async with asyncio.timeout(15):
+                state = await get_vision_backend().readiness()
+            if state.backend != profile.backend:
+                raise VisionBackendError("invalid_response")
+            result = state.model_dump()
+            result["reason"] = None if state.ready else "not_ready"
+        except TimeoutError:
+            result = {"backend": profile.backend, "ready": False, "reason": "timeout"}
+        except VisionBackendError as error:
+            result = {"backend": profile.backend, "ready": False, "reason": error.reason, "message": error.user_message}
+        return {
+            **result,
+            "model": profile.model,
+            "profile_revision": profile.revision,
+            "timeout_seconds": min(300, max(1, config.settings.llm_timeout)),
+            "max_parallelism": 30 if profile.backend == "litellm" else 1,
+            "chat_available": config.settings.chat_enabled and profile.backend == "litellm",
+        }
+    finally:
+        current_profile.reset(token)
 
 
 # ============================================================================
@@ -146,13 +197,22 @@ async def create_profile(request: ProfileCreateRequest) -> ProfileResponse:
     new_profile = ModelProfile(
         name=request.name,
         model=request.model,
+        backend=request.backend,
         api_key=SecretStr(request.api_key) if request.api_key else None,
         api_base=request.api_base,
         status=status,
     )
 
+    if status == ProfileStatus.PRIMARY:
+        for profile in settings.llm_profiles:
+            if profile.status == ProfileStatus.PRIMARY:
+                profile.status = ProfileStatus.OFF
+    if status == ProfileStatus.FALLBACK:
+        for profile in settings.llm_profiles:
+            if profile.status == ProfileStatus.FALLBACK:
+                profile.status = ProfileStatus.OFF
     settings.llm_profiles.append(new_profile)
-    save_settings(settings)
+    _save_checked(settings)
     logger.info(f"Created LLM profile: {request.name}")
 
     return _profile_to_response(new_profile)
@@ -178,6 +238,8 @@ async def update_profile(name: str, request: ProfileUpdateRequest) -> ProfileRes
     # Update fields if provided
     if request.model is not None:
         profile.model = request.model
+    if request.backend is not None:
+        profile.backend = request.backend
 
     if request.api_base is not None:
         profile.api_base = request.api_base if request.api_base else None
@@ -206,7 +268,7 @@ async def update_profile(name: str, request: ProfileUpdateRequest) -> ProfileRes
 
         profile.status = new_status
 
-    save_settings(settings)
+    _save_checked(settings)
     logger.info(f"Updated LLM profile: {profile.name}")
 
     return _profile_to_response(profile)
@@ -229,7 +291,7 @@ async def delete_profile(name: str) -> None:
         settings.llm_profiles[0].status = ProfileStatus.PRIMARY
         logger.info(f"Activated '{settings.llm_profiles[0].name}' after deleting primary profile")
 
-    save_settings(settings)
+    _save_checked(settings)
     logger.info(f"Deleted LLM profile: {name}")
 
 
@@ -248,7 +310,7 @@ async def activate_profile(name: str) -> ProfileResponse:
 
     # Activate the target profile (already in the list, mutated in-place)
     profile.status = ProfileStatus.PRIMARY
-    save_settings(settings)
+    _save_checked(settings)
     logger.info(f"Activated LLM profile: {name}")
 
     return _profile_to_response(profile)
@@ -265,6 +327,23 @@ async def test_profile_connection(name: str, request: TestConnectionRequest | No
     settings = load_settings()
 
     _, profile = _find_profile(settings, name)
+
+    kind = request.backend if request and request.backend is not None else profile_backend(profile)
+    if kind != "litellm":
+        pinned = replace(
+            resolve_vision_profile(), backend=kind, model=(request.model if request else profile.model) or None
+        )
+        token = current_profile.set(pinned)
+        try:
+            async with asyncio.timeout(15):
+                state = await CodexBackend().readiness() if kind == "codex_cli" else None
+            return TestConnectionResponse(
+                success=bool(state and state.ready), message="Ready" if state and state.ready else "Not ready"
+            )
+        except TimeoutError, VisionBackendError:
+            return TestConnectionResponse(success=False, message="Codex is not ready. Check the host worker and login.")
+        finally:
+            current_profile.reset(token)
 
     # Use overrides if provided, otherwise use saved values
     model = request.model if request and request.model else profile.model

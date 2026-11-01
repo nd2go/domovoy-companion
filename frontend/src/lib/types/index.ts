@@ -249,7 +249,9 @@ export interface ItemInput extends ItemCore, ItemExtended {
 }
 
 /** Item for merge operations */
-export interface MergeItem extends ItemCore, ItemExtended {}
+export interface MergeItem extends ItemCore, ItemExtended {
+	custom_fields?: Record<string, string> | null;
+}
 
 // =============================================================================
 // API TYPES - Responses

@@ -66,6 +66,7 @@ export interface StoredConfirmedItem extends StoredReviewItem {
 
 /** Complete session state for IndexedDB storage */
 export interface StoredSession {
+	analysisRevision?: number;
 	// Metadata
 	id: string;
 	createdAt: number;

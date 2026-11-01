@@ -586,12 +586,21 @@ async def get_vision_context(
     app_settings = getattr(request.app.state, "settings", settings)
     kind = HomeboxAuthKind.API_KEY if app_settings.auth_mode == "api_key" else HomeboxAuthKind.LEGACY
     identity_scope = (
-        "configured-api-key"
-        if kind == HomeboxAuthKind.API_KEY
-        else hashlib.sha256(token.encode()).hexdigest()
+        "configured-api-key" if kind == HomeboxAuthKind.API_KEY else hashlib.sha256(token.encode()).hexdigest()
     )
     access = HomeboxAccess(SecretStr(token), kind, identity_scope, request.headers.get("X-Group-Id"))
     gateway = HomeboxGateway(get_client(request), access)
+
+    from homebox_companion.ai.worker_client import current_call
+
+    if current_call.get() is not None:
+        from .vision_runtime import bind_worker_context
+
+        access = await get_verified_homebox_access(
+            request, token, get_client(request), request.headers.get("X-Group-Id")
+        )
+        gateway = HomeboxGateway(get_client(request), access)
+        await bind_worker_context(request, gateway)
 
     # Load field preferences from header if provided (demo mode), otherwise from file
     if x_field_preferences:

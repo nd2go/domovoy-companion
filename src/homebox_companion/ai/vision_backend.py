@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel, ValidationError
 
-from ..core import config
 from ..core.exceptions import CapabilityNotSupportedError, LLMServiceError
 from .vision_contract import (
     MAX_RESULT_BYTES,
@@ -20,6 +19,8 @@ from .vision_contract import (
     VisionResponse,
     bounded_json,
 )
+from .vision_profiles import current_profile, selected_profile
+from .worker_client import CodexBackend
 
 if TYPE_CHECKING:
     from typing import Any
@@ -40,10 +41,9 @@ class LiteLLMBackend:
     kind: BackendKind = "litellm"
 
     def __init__(self, response_model: type[BaseModel] | None = None):
-        from ..core.llm_utils import resolve_llm_credentials
-
         self.response_model = response_model
-        self.credentials = resolve_llm_credentials()
+        self.profile = selected_profile()
+        self.credentials = self.profile.credentials
         self.model = self.credentials.model
 
     async def readiness(self) -> VisionReadiness:
@@ -53,14 +53,18 @@ class LiteLLMBackend:
         from .llm import _litellm_vision_completion
 
         started = asyncio.get_running_loop().time()
-        data = await _litellm_vision_completion(
-            request.system_prompt,
-            request.user_prompt,
-            request.image_data_uris,
-            expected_keys=request.expected_keys or None,
-            response_model=self.response_model,
-            timeout=request.timeout_seconds,
-        )
+        token = current_profile.set(self.profile)
+        try:
+            data = await _litellm_vision_completion(
+                request.system_prompt,
+                request.user_prompt,
+                request.image_data_uris,
+                expected_keys=request.expected_keys or None,
+                response_model=self.response_model,
+                timeout=request.timeout_seconds,
+            )
+        finally:
+            current_profile.reset(token)
         return VisionResponse(
             request_id=request.request_id,
             backend=self.kind,
@@ -84,12 +88,15 @@ class UnavailableBackend:
         raise VisionBackendError("not_ready")
 
 
-BACKEND_FACTORIES: dict[BackendKind, Callable[[type[BaseModel] | None], VisionBackend]] = {"litellm": LiteLLMBackend}
+BACKEND_FACTORIES: dict[BackendKind, Callable[[type[BaseModel] | None], VisionBackend]] = {
+    "litellm": LiteLLMBackend,
+    "codex_cli": CodexBackend,
+}
 
 
 def get_vision_backend(response_model: type[BaseModel] | None = None) -> VisionBackend:
     """Select one explicit backend. Never fall back to a different kind."""
-    kind = config.settings.vision_backend
+    kind = selected_profile().backend
     factory = BACKEND_FACTORIES.get(kind)
     backend = factory(response_model) if factory else UnavailableBackend(kind)
     if backend.kind != kind:
@@ -117,7 +124,9 @@ async def run_vision(
                 or (request.response_schema is not None and not readiness.structured_output)
             ):
                 raise VisionBackendError("not_ready")
-            response = await backend.complete(request)
+            response = await backend.complete(
+                request.model_copy(update={"timeout_seconds": max(0.001, deadline - clock())})
+            )
             if clock() >= deadline:
                 raise VisionBackendError("timeout")
             if (
@@ -133,6 +142,12 @@ async def run_vision(
                 response_model.model_validate_json(encoded, strict=True)
             if clock() >= deadline:
                 raise VisionBackendError("timeout")
+            from .vision_profiles import resolve_vision_profile
+            from .worker_client import current_call
+
+            call = current_call.get()
+            if call is not None and call.profile_revision != resolve_vision_profile().revision:
+                raise VisionBackendError("not_ready", reason="profile_changed")
             return response.data
     except VisionBackendError:
         raise

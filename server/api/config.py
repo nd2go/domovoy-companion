@@ -22,6 +22,7 @@ class ConfigResponse(BaseModel):
     capture_max_file_size_mb: int
     print_enabled: bool
     auth_mode: str
+    vision_backend: str = "litellm"
 
 
 @router.get("/config", response_model=ConfigResponse)
@@ -32,6 +33,8 @@ async def get_config(request: Request) -> ConfigResponse:
     for display in the Settings page.
     """
     app_settings = request.app.state.settings
+    from homebox_companion.ai.vision_profiles import profile_backend
+
     return ConfigResponse(
         is_demo_mode=app_settings.is_demo_mode,
         demo_mode_explicit=app_settings.demo_mode,
@@ -44,4 +47,5 @@ async def get_config(request: Request) -> ConfigResponse:
         capture_max_file_size_mb=app_settings.capture_max_file_size_mb,
         print_enabled=app_settings.print_enabled,
         auth_mode=app_settings.auth_mode,
+        vision_backend=profile_backend(),
     )

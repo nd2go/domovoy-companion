@@ -24,7 +24,12 @@ MAX_PROMPT_CHARS = 64 * 1024
 class VisionBackendError(LLMServiceError):
     """Return a fixed error code without provider output or credentials."""
 
-    def __init__(self, code: Literal["not_ready", "timeout", "invalid_input", "invalid_response", "provider_failed"]):
+    def __init__(
+        self,
+        code: Literal["not_ready", "timeout", "invalid_input", "invalid_response", "provider_failed"],
+        *,
+        reason: str | None = None,
+    ):
         self.code = code
         self.error_code = "VISION_" + code.upper()
         self.status_code = {"not_ready": 503, "timeout": 504, "invalid_input": 400}.get(code, 502)
@@ -35,6 +40,19 @@ class VisionBackendError(LLMServiceError):
             "invalid_response": "The vision response does not match the request or schema.",
             "provider_failed": "The selected vision backend failed. No other backend was selected.",
         }[code]
+        reasons = {
+            "auth_required": (503, "Sign in to Codex on the host, then retry."),
+            "unsupported_version": (503, "The host Codex version is not supported."),
+            "busy": (409, "Codex is busy. Keep your photos and retry when it is free."),
+            "quota": (429, "The Codex usage limit was reached. Retry after the limit resets."),
+            "cancelled": (409, "Analysis was cancelled. Your photos and edits were kept."),
+            "profile_changed": (409, "The AI profile changed. Keep your edits and start analysis again."),
+            "chat_unavailable": (503, "Chat is unavailable with a Codex profile. Select an API profile to use chat."),
+        }
+        self.reason = reason if reason in reasons else code
+        if self.reason in reasons:
+            self.status_code, message = reasons[self.reason]
+            self.error_code = "VISION_" + self.reason.upper()
         super().__init__(message, user_message=message)
 
 

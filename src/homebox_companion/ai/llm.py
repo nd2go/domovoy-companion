@@ -13,6 +13,7 @@ Public API:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -38,6 +39,11 @@ def _resolve_model_for_capabilities() -> str | None:
         Resolved model name, or None if no model configured anywhere.
     """
     from ..core.llm_utils import resolve_llm_credentials
+    from .vision_profiles import current_profile
+
+    pinned = current_profile.get()
+    if pinned is not None:
+        return pinned.model
 
     creds = resolve_llm_credentials()
     return creds.model
@@ -70,9 +76,7 @@ async def chat_completion(
         if resolved_model:
             caps = get_model_capabilities(resolved_model)
             if not caps.structured_output:
-                logger.debug(
-                    f"Model {resolved_model} doesn't support structured output, using prompt-only JSON"
-                )
+                logger.debug(f"Model {resolved_model} doesn't support structured output, using prompt-only JSON")
                 effective_response_format = None
 
     return await json_completion(
@@ -123,10 +127,7 @@ async def _litellm_vision_completion(
         # Attempt structured output — works with LM Studio and most
         # OpenAI-compatible providers that support json_schema.
         response_format = response_model
-        logger.debug(
-            f"Skipping capability validation for model '{resolved_model}' "
-            f"(HBC_LLM_ALLOW_UNSAFE_MODELS=true)"
-        )
+        logger.debug(f"Skipping capability validation for model '{resolved_model}' (HBC_LLM_ALLOW_UNSAFE_MODELS=true)")
     else:
         # Validate model capabilities
         if not resolved_model:
@@ -190,10 +191,7 @@ async def _litellm_vision_completion(
         if caps.structured_output and response_model:
             response_format = response_model
         elif not caps.structured_output:
-            logger.debug(
-                f"Model {resolved_model} doesn't support structured output, "
-                f"using prompt-only JSON"
-            )
+            logger.debug(f"Model {resolved_model} doesn't support structured output, using prompt-only JSON")
 
     # Build content list with text and images
     content: list[dict[str, Any]] = [{"type": "text", "text": user_prompt}]
@@ -229,6 +227,12 @@ async def vision_completion(
     if not image_data_uris:
         raise ValueError("vision_completion requires at least one image")
     backend = vision_backend.get_vision_backend(response_model)
+    from .worker_client import current_call
+
+    call = current_call.get()
+    if call is not None:
+        request_id = call.request_id
+        timeout_seconds = max(0.001, call.deadline - asyncio.get_running_loop().time())
     try:
         request = VisionRequest(
             backend=backend.kind,

@@ -284,13 +284,13 @@
 		editedItem.asset_id = value;
 	}
 
-	async function handleAiCorrection(correctionPrompt: string) {
-		if (!editedItem) return;
+	async function handleAiCorrection(correctionPrompt: string): Promise<boolean> {
+		if (!editedItem) return false;
 
 		const sourceImage = images[editedItem.sourceImageIndex];
 		if (!sourceImage) {
 			showToast('Original image not found', 'error');
-			return;
+			return false;
 		}
 
 		isProcessing = true;
@@ -308,6 +308,7 @@
 					purchase_price: editedItem.purchase_price,
 					purchase_from: editedItem.purchase_from,
 					notes: editedItem.notes,
+					custom_fields: editedItem.custom_fields,
 				},
 				correctionPrompt
 			);
@@ -333,6 +334,7 @@
 
 				// Visual feedback is sufficient - form updates are visible
 				showAiCorrection = false;
+				return true;
 			}
 		} catch (error) {
 			log.error('AI correction failed:', error);
@@ -340,6 +342,7 @@
 		} finally {
 			isProcessing = false;
 		}
+		return false;
 	}
 
 	// Derived images with data URLs for thumbnail editor

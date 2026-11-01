@@ -332,7 +332,7 @@ async def test_explicit_request_id_timeout_and_model_are_separate(selected):
     request_id = uuid4()
     await llm.vision_completion("inspect", "json", [URI], request_id=request_id, timeout_seconds=0.5)
     sent = selected.requests[0]
-    assert sent.request_id == request_id and sent.timeout_seconds == 0.5
+    assert sent.request_id == request_id and 0 < sent.timeout_seconds <= 0.5
     assert sent.model is None
     assert "api_key" not in sent.model_dump()
 
@@ -355,7 +355,7 @@ async def test_legacy_api_keeps_model_format_negotiation(monkeypatch, native_sch
     monkeypatch.setattr(
         llm_utils,
         "resolve_llm_credentials",
-        lambda: llm_utils.LLMCredentials("synthetic-vision", "synthetic-key", None),
+        lambda **_: llm_utils.LLMCredentials("synthetic-vision", "synthetic-key", None),
     )
     monkeypatch.setattr(
         llm,

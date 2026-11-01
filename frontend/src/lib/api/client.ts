@@ -285,6 +285,7 @@ export function promoteConfiguredKeyFailure(
 			typeof errorData === 'object' && errorData !== null && 'code' in errorData
 				? String((errorData as { code: unknown }).code)
 				: '';
+		if (code.startsWith('VISION_')) return;
 		if (
 			status !== 503 ||
 			code === 'HOMEBOX_UNAVAILABLE' ||
