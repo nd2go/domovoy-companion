@@ -1,3 +1,4 @@
+import { visionSession } from '$lib/services/visionSession';
 /**
  * ScanWorkflow - Coordinates the entire scan-to-submit workflow
  *
@@ -519,9 +520,12 @@ class ScanWorkflow {
 		this._error = null;
 		log.debug('Status set to "analyzing", delegating to AnalysisService');
 
+		const generation = this.contextGeneration;
 		const result = await this.analysisService.analyze(this.captureService.images);
+		if (generation !== this.contextGeneration) return;
 
 		// Check if cancelled (status may have changed)
+		if (generation !== this.contextGeneration) return;
 		if (this._status !== 'analyzing') {
 			log.debug('Analysis was cancelled or status changed during processing');
 			return;
@@ -580,12 +584,14 @@ class ScanWorkflow {
 		const existingItems = this.reviewService.detectedItems;
 
 		// Retry failed images
+		const generation = this.contextGeneration;
 		const result = await this.analysisService.retryFailed(
 			this.captureService.images,
 			existingItems
 		);
 
 		// Check if cancelled (status may have changed)
+		if (generation !== this.contextGeneration) return;
 		if (this._status !== 'analyzing') {
 			log.debug('Retry was cancelled or status changed during processing');
 			return;
@@ -1054,7 +1060,7 @@ class ScanWorkflow {
 				this._persistedCreatedAt = now;
 			}
 			if (this._persistedSessionId === null) {
-				this._persistedSessionId = crypto.randomUUID();
+				this._persistedSessionId = visionSession.draftId;
 				log.info(`New session created: ${this._persistedSessionId}`);
 			}
 
@@ -1068,6 +1074,7 @@ class ScanWorkflow {
 			// Step 5: Build session object
 			const session: StoredSession = {
 				id: this._persistedSessionId,
+				analysisRevision: visionSession.revision,
 				createdAt: this._persistedCreatedAt,
 				updatedAt: now,
 				status: this._status,
@@ -1180,6 +1187,7 @@ class ScanWorkflow {
 			// Cache timestamps and ID for future persist() calls
 			this._persistedCreatedAt = session.createdAt;
 			this._persistedSessionId = session.id;
+			visionSession.restore(session.id, session.analysisRevision ?? 0);
 
 			log.info('Session recovered successfully');
 			return true;
@@ -1224,6 +1232,7 @@ class ScanWorkflow {
 	reset(clearPersisted = true): void {
 		const scope = sessionPersistence.captureSessionScope();
 		this.contextGeneration++;
+		visionSession.reset();
 		// Cancel any pending debounced persist to prevent stale writes after reset
 		if (this._persistTimeout) {
 			clearTimeout(this._persistTimeout);

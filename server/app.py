@@ -71,7 +71,7 @@ def _is_newer_version(latest: str, current: str) -> bool:
         latest_parts = _parse_version(latest)
         current_parts = _parse_version(current)
         return latest_parts > current_parts
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         return False
 
 
@@ -328,6 +328,9 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     resolved_settings = app.state.settings
 
     app.add_middleware(RequestBodyLimitMiddleware, settings=resolved_settings)  # type: ignore[arg-type]
+    from .vision_runtime import VisionAdmissionMiddleware
+
+    app.add_middleware(VisionAdmissionMiddleware, settings=resolved_settings)
 
     # Wrap the body limiter so rejected requests also receive a request ID.
     # Uses pure ASGI middleware to avoid issues with SSE streaming

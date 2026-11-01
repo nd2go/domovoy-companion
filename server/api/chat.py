@@ -22,6 +22,7 @@ from loguru import logger
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from homebox_companion.ai.vision_profiles import profile_backend, require_api_chat
 from homebox_companion.chat.approvals import ApprovalService
 from homebox_companion.chat.orchestrator import ChatOrchestrator
 from homebox_companion.chat.session import ChatSession
@@ -138,6 +139,7 @@ async def send_message(
         EventSourceResponse with streaming events
     """
     app_settings = client_request.app.state.settings
+    require_api_chat()
     if not app_settings.chat_enabled:
         raise HTTPException(status_code=503, detail="Chat feature is disabled")
     if app_settings.demo_mode:
@@ -366,9 +368,10 @@ async def chat_health(request: Request) -> dict[str, Any]:
     Returns:
         Status information about the chat service
     """
+    enabled = request.app.state.settings.chat_enabled and profile_backend() == "litellm"
     return {
-        "status": "healthy" if request.app.state.settings.chat_enabled else "disabled",
-        "chat_enabled": request.app.state.settings.chat_enabled,
+        "status": "healthy" if enabled else "disabled",
+        "chat_enabled": enabled,
         "max_history": request.app.state.settings.chat_max_history,
         "approval_timeout_seconds": request.app.state.settings.chat_approval_timeout,
     }

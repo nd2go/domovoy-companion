@@ -1,3 +1,4 @@
+import { visionSession } from '$lib/services/visionSession';
 /**
  * AnalysisService - Handles AI detection and analysis operations
  *
@@ -123,6 +124,7 @@ export class AnalysisService {
 		const allDetectedItems: ReviewItem[] = [];
 		let completedCount = 0;
 		const signal = this.abortController?.signal;
+		const operation = await visionSession.begin();
 
 		// Process images with limited concurrency to prevent overwhelming browser/server
 		log.debug(
@@ -155,6 +157,7 @@ export class AnalysisService {
 						extraInstructions: image.extraInstructions || undefined,
 						extractExtendedFields: true,
 						additionalImages: image.additionalFiles,
+						operation,
 						signal,
 					});
 
@@ -205,7 +208,7 @@ export class AnalysisService {
 					};
 				}
 			},
-			MAX_CONCURRENT_REQUESTS
+			operation.readiness.backend === 'codex_cli' ? 1 : MAX_CONCURRENT_REQUESTS
 		);
 
 		log.debug(`All detections complete. Processing ${results.length} result(s)...`);
@@ -376,6 +379,7 @@ export class AnalysisService {
 
 	/** Cancel ongoing analysis */
 	cancel(): void {
+		visionSession.invalidate();
 		if (this.abortController) {
 			this.abortController.abort();
 			this.abortController = null;

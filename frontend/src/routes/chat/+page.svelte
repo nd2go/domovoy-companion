@@ -26,6 +26,7 @@
 	let messagesContainer: HTMLDivElement | null = $state(null);
 	let isEnabled = $state(true);
 	let isDemoMode = $state(false);
+	let cliMode = $state(false);
 	let approvalModalOpen = $state(false);
 
 	// Terminal-style auto-scroll: only scroll if user hasn't scrolled up
@@ -118,6 +119,7 @@
 		// (guards against race condition where this page mounts before layout's config fetch completes)
 		try {
 			const config = await getConfig();
+			cliMode = config.vision_backend === 'codex_cli';
 			setDemoMode(config.is_demo_mode, config.demo_mode_explicit);
 		} catch (error) {
 			log.debug('Failed to fetch config:', error);
@@ -131,7 +133,7 @@
 			return;
 		}
 
-		isEnabled = await chatStore.checkEnabled();
+		isEnabled = !cliMode && (await chatStore.checkEnabled());
 		log.debug(`Chat enabled: ${isEnabled}`);
 		if (isEnabled) {
 			// Validate session state with backend - clears local messages if backend was reset
@@ -175,6 +177,12 @@
 				</p>
 				<p class="max-w-xs text-center text-body-sm text-neutral-500">
 					To use chat, please set up your own instance with your own API key.
+				</p>
+			{:else if cliMode}
+				<Ban class="text-warning-500" size={32} strokeWidth={1.5} />
+				<h2 class="mb-2 text-h3 text-neutral-100">Chat Unavailable</h2>
+				<p class="max-w-sm text-center text-body-sm text-neutral-400">
+					A Codex profile supports photo analysis. Select an API profile to use chat.
 				</p>
 			{:else}
 				<!-- Server disabled state -->

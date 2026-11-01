@@ -11,12 +11,14 @@ Settings flow:
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 import threading
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 import yaml
 from loguru import logger
@@ -60,6 +62,7 @@ class ModelProfile(BaseModel):
 
     name: str
     model: str
+    backend: Literal["litellm", "codex_cli"] | None = None
     api_key: SecretStr | None = None
     api_base: str | None = None
     status: ProfileStatus = ProfileStatus.OFF
@@ -145,6 +148,8 @@ class PersistentSettings(BaseModel):
             raise ValueError(f"Exactly one profile must be PRIMARY, found {len(actives)}")
         if len(fallbacks) > 1:
             raise ValueError(f"At most one profile can be FALLBACK, found {len(fallbacks)}")
+        if any(p.backend == "codex_cli" for p in fallbacks):
+            raise ValueError("Codex cannot be an automatic fallback")
 
         return self
 
@@ -158,6 +163,8 @@ def _settings_to_yaml_dict(settings: PersistentSettings) -> dict:
             "model": p.model,
             "status": p.status.value,
         }
+        if p.backend is not None:
+            profile_dict["backend"] = p.backend
         if p.api_key:
             profile_dict["api_key"] = p.api_key.get_secret_value()
         if p.api_base:
@@ -180,6 +187,7 @@ def _yaml_dict_to_settings(data: dict) -> PersistentSettings:
             ModelProfile(
                 name=p["name"],
                 model=p["model"],
+                backend=p.get("backend"),
                 api_key=SecretStr(p["api_key"]) if p.get("api_key") else None,
                 api_base=p.get("api_base"),
                 status=ProfileStatus(p.get("status", "off")),
@@ -321,7 +329,16 @@ def save_settings(settings: PersistentSettings) -> None:
         # Use default_flow_style=False for readable multi-line output
         yaml_content = yaml.dump(yaml_dict, default_flow_style=False, allow_unicode=True)
 
-        SETTINGS_FILE.write_text(yaml_content, encoding="utf-8")
+        descriptor, pending = tempfile.mkstemp(prefix=".settings-", dir=SETTINGS_FILE.parent)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                stream.write(yaml_content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(pending, SETTINGS_FILE)
+        finally:
+            if os.path.exists(pending):
+                os.unlink(pending)
         logger.debug("Settings saved to settings.yaml")
 
         # Clear cache inside lock to prevent race conditions

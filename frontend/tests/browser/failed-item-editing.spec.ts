@@ -37,6 +37,7 @@ async function openSummary(
 	await page.route('**/api/**', async (route) => {
 		const request = route.request();
 		const path = new URL(request.url()).pathname;
+		if (path === '/api/llm/readiness') return route.fulfill(json({ backend: 'litellm', ready: true, model: 'test', reason: null, profile_revision: 'test', timeout_seconds: 120, max_parallelism: 30, chat_available: true }));
 		options.operations?.push(`${request.method()} ${path}`);
 		if (path === '/api/config') {
 			return route.fulfill(

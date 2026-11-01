@@ -6,7 +6,14 @@
 	 */
 	import { onMount, onDestroy } from 'svelte';
 	import { FlaskConical, Plus, Check, Zap, Pencil, Trash2 } from 'lucide-svelte';
-	import { llmProfiles, type LLMProfile, type ProfileStatus } from '$lib/api/settings';
+	import {
+		llmProfiles,
+		type LLMProfile,
+		type ProfileStatus,
+		type VisionBackend,
+		type VisionReadiness,
+	} from '$lib/api/settings';
+	import { visionSession } from '$lib/services/visionSession';
 	import Button from '$lib/components/Button.svelte';
 	import Modal from '$lib/components/Modal.svelte';
 
@@ -22,6 +29,8 @@
 	let editingProfile = $state<LLMProfile | null>(null);
 	let formName = $state('');
 	let formModel = $state('');
+	let formBackend = $state<VisionBackend>('litellm');
+	let readiness = $state<VisionReadiness | null>(null);
 	let formApiKey = $state('');
 	let formApiBase = $state('');
 	let formStatus = $state<ProfileStatus>('off');
@@ -45,6 +54,7 @@
 		try {
 			const result = await llmProfiles.list();
 			profiles = result.profiles;
+			readiness = await llmProfiles.readiness();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load profiles';
 		} finally {
@@ -56,6 +66,7 @@
 		editingProfile = null;
 		formName = '';
 		formModel = '';
+		formBackend = 'litellm';
 		formApiKey = '';
 		formApiBase = '';
 		formStatus = 'off';
@@ -66,6 +77,7 @@
 		editingProfile = profile;
 		formName = profile.name;
 		formModel = profile.model;
+		formBackend = profile.backend ?? 'litellm';
 		formApiKey = ''; // Don't pre-fill - user must re-enter
 		formApiBase = profile.api_base || '';
 		formStatus = profile.status;
@@ -81,11 +93,13 @@
 		saving = true;
 		error = null;
 		try {
+			visionSession.invalidate();
 			if (editingProfile) {
 				// Update existing
 				await llmProfiles.update(editingProfile.name, {
 					new_name: formName !== editingProfile.name ? formName : undefined,
 					model: formModel,
+					backend: formBackend,
 					api_key: formApiKey || undefined, // undefined = keep existing, value = set new
 					api_base: formApiBase || null,
 					status: formStatus,
@@ -95,6 +109,7 @@
 				await llmProfiles.create({
 					name: formName,
 					model: formModel,
+					backend: formBackend,
 					api_key: formApiKey || undefined,
 					api_base: formApiBase || undefined,
 					status: formStatus,
@@ -123,6 +138,7 @@
 	async function handleActivate(name: string) {
 		error = null;
 		try {
+			visionSession.invalidate();
 			await llmProfiles.activate(name);
 			await loadProfiles();
 		} catch (e) {
@@ -172,6 +188,17 @@
 			Add
 		</Button>
 	</div>
+	{#if readiness}
+		<p role="status" class="text-sm text-neutral-400">
+			{readiness.backend === 'codex_cli' ? 'Codex CLI' : 'API'}:
+			{readiness.ready ? 'Ready' : readiness.message || readiness.reason || 'Not ready'}
+		</p>
+		{#if readiness.backend === 'codex_cli'}
+			<p class="text-sm text-neutral-400">
+				Chat is unavailable with a Codex profile. Photos and review remain available.
+			</p>
+		{/if}
+	{/if}
 
 	{#if error}
 		<div class="text-error-400 rounded-lg border border-error-500/30 bg-error-500/10 p-3 text-sm">
@@ -217,7 +244,10 @@
 								{profile.status}
 							</span>
 						</div>
-						<p class="mt-0.5 truncate text-sm text-neutral-400">{profile.model}</p>
+						<p class="mt-0.5 truncate text-sm text-neutral-400">
+							{profile.backend === 'codex_cli' ? 'Codex CLI' : 'API'} · {profile.model ||
+								'CLI default'}
+						</p>
 						{#if profile.api_base}
 							<p class="truncate text-xs text-neutral-500">{profile.api_base}</p>
 						{/if}
@@ -303,6 +333,23 @@
 		</div>
 
 		<div>
+			<label for="profile-backend" class="mb-1 block text-sm font-medium text-neutral-300"
+				>Connection</label
+			>
+			<select
+				id="profile-backend"
+				bind:value={formBackend}
+				class="input-sm"
+				onchange={() => {
+					formModel = '';
+					if (formBackend === 'codex_cli' && formStatus === 'fallback') formStatus = 'off';
+				}}
+			>
+				<option value="litellm">API</option>
+				<option value="codex_cli">Codex CLI</option>
+			</select>
+		</div>
+		<div>
 			<label for="profile-model" class="mb-1 block text-sm font-medium text-neutral-300">
 				Model
 			</label>
@@ -310,43 +357,47 @@
 				id="profile-model"
 				type="text"
 				bind:value={formModel}
-				required
+				required={formBackend === 'litellm'}
 				placeholder="e.g., gpt-4o, ollama/mistral"
 				class="input-sm"
 			/>
 			<p class="mt-1 text-xs text-neutral-500">
-				LiteLLM model format: gpt-4o, claude-3-opus, ollama/mistral
+				{formBackend === 'codex_cli'
+					? 'Leave blank to use the host CLI default.'
+					: 'Use the API provider model name.'}
 			</p>
 		</div>
 
-		<div>
-			<label for="profile-api-key" class="mb-1 block text-sm font-medium text-neutral-300">
-				API Key
-			</label>
-			<input
-				id="profile-api-key"
-				type="password"
-				bind:value={formApiKey}
-				placeholder={editingProfile?.has_api_key ? '••••••••' : 'sk-...'}
-				class="input-sm"
-			/>
-			{#if editingProfile}
-				<p class="mt-1 text-xs text-neutral-500">Leave blank to keep existing key</p>
-			{/if}
-		</div>
+		{#if formBackend === 'litellm'}
+			<div>
+				<label for="profile-api-key" class="mb-1 block text-sm font-medium text-neutral-300">
+					API Key
+				</label>
+				<input
+					id="profile-api-key"
+					type="password"
+					bind:value={formApiKey}
+					placeholder={editingProfile?.has_api_key ? '••••••••' : 'sk-...'}
+					class="input-sm"
+				/>
+				{#if editingProfile}
+					<p class="mt-1 text-xs text-neutral-500">Leave blank to keep existing key</p>
+				{/if}
+			</div>
 
-		<div>
-			<label for="profile-api-base" class="mb-1 block text-sm font-medium text-neutral-300">
-				API Base URL <span class="text-neutral-500">(optional)</span>
-			</label>
-			<input
-				id="profile-api-base"
-				type="text"
-				bind:value={formApiBase}
-				placeholder="e.g., http://localhost:11434"
-				class="input-sm"
-			/>
-		</div>
+			<div>
+				<label for="profile-api-base" class="mb-1 block text-sm font-medium text-neutral-300">
+					API Base URL <span class="text-neutral-500">(optional)</span>
+				</label>
+				<input
+					id="profile-api-base"
+					type="text"
+					bind:value={formApiBase}
+					placeholder="e.g., http://localhost:11434"
+					class="input-sm"
+				/>
+			</div>
+		{/if}
 
 		<div>
 			<label for="profile-status" class="mb-1 block text-sm font-medium text-neutral-300">
@@ -354,12 +405,12 @@
 			</label>
 			<select id="profile-status" bind:value={formStatus} class="input-sm">
 				<option value="primary">Primary</option>
-				<option value="fallback">Fallback</option>
+				{#if formBackend === 'litellm'}<option value="fallback">Fallback</option>{/if}
 				<option value="off">Off</option>
 			</select>
 			<p class="mt-1 text-xs text-neutral-500">
 				{#if formStatus === 'primary'}
-					Primary model used for all AI features
+					Primary profile used for photo analysis
 				{:else if formStatus === 'fallback'}
 					Used automatically if the primary model fails
 				{:else}

@@ -3,6 +3,7 @@
  */
 
 import { request, requestFormData } from './client';
+import { visionSession, type VisionOperation } from '$lib/services/visionSession';
 import { getIsDemoMode, fieldPreferences } from './settings';
 import { apiLogger as log } from '../utils/logger';
 import type {
@@ -14,6 +15,7 @@ import type {
 } from '../types';
 
 export interface DetectOptions {
+	operation?: VisionOperation;
 	singleItem?: boolean;
 	extraInstructions?: string;
 	extractExtendedFields?: boolean;
@@ -22,6 +24,7 @@ export interface DetectOptions {
 }
 
 export interface AnalyzeOptions {
+	operation?: VisionOperation;
 	signal?: AbortSignal;
 }
 
@@ -30,6 +33,7 @@ export interface MergeOptions {
 }
 
 export interface CorrectOptions {
+	operation?: VisionOperation;
 	signal?: AbortSignal;
 }
 
@@ -88,11 +92,14 @@ export const vision = {
 
 		const headers = await buildVisionHeaders();
 		log.info('Sending vision/detect request to backend');
-		return requestFormData<DetectionResponse>('/tools/vision/detect', formData, {
-			errorMessage: 'Detection failed',
-			signal: options.signal,
-			headers,
-		});
+		return visionSession.run(options.operation, options.signal, (contextHeaders, signal, timeout) =>
+			requestFormData<DetectionResponse>('/tools/vision/detect', formData, {
+				errorMessage: 'Detection failed',
+				signal,
+				timeout,
+				headers: { ...headers, ...contextHeaders },
+			})
+		);
 	},
 
 	/**
@@ -117,11 +124,14 @@ export const vision = {
 
 		const headers = await buildVisionHeaders();
 		log.info(`Sending vision/analyze request for "${itemName}" to backend`);
-		return requestFormData<AdvancedItemDetails>('/tools/vision/analyze', formData, {
-			errorMessage: 'Analysis failed',
-			signal: options.signal,
-			headers,
-		});
+		return visionSession.run(options.operation, options.signal, (contextHeaders, signal, timeout) =>
+			requestFormData<AdvancedItemDetails>('/tools/vision/analyze', formData, {
+				errorMessage: 'Analysis failed',
+				signal,
+				timeout,
+				headers: { ...headers, ...contextHeaders },
+			})
+		);
 	},
 
 	/**
@@ -164,10 +174,13 @@ export const vision = {
 
 		const headers = await buildVisionHeaders();
 		log.info(`Sending vision/correct request for "${currentItem.name}" to backend`);
-		return requestFormData<CorrectionResponse>('/tools/vision/correct', formData, {
-			errorMessage: 'Correction failed',
-			signal: options.signal,
-			headers,
-		});
+		return visionSession.run(options.operation, options.signal, (contextHeaders, signal, timeout) =>
+			requestFormData<CorrectionResponse>('/tools/vision/correct', formData, {
+				errorMessage: 'Correction failed',
+				signal,
+				timeout,
+				headers: { ...headers, ...contextHeaders },
+			})
+		);
 	},
 };

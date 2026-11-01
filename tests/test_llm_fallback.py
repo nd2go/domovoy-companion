@@ -450,7 +450,7 @@ class TestJsonCompletionWithRouter:
 class TestSettingsInvalidation:
     """Tests for Router invalidation when settings change."""
 
-    def test_save_settings_invalidates_router(self) -> None:
+    def test_save_settings_invalidates_router(self, tmp_path) -> None:
         """Saving settings should invalidate the Router singleton."""
         from homebox_companion.core.llm_utils import LLMCredentials
         from homebox_companion.core.persistent_settings import (
@@ -476,12 +476,9 @@ class TestSettingsInvalidation:
                 "homebox_companion.core.llm_router.get_fallback_profile",
                 return_value=None,
             ),
-            patch("homebox_companion.core.persistent_settings.SETTINGS_FILE") as mock_file,
-            patch("homebox_companion.core.persistent_settings.DATA_DIR") as mock_dir,
+            patch("homebox_companion.core.persistent_settings.SETTINGS_FILE", tmp_path / "settings.yaml"),
+            patch("homebox_companion.core.persistent_settings.DATA_DIR", tmp_path),
         ):
-            mock_dir.mkdir = MagicMock()
-            mock_file.write_text = MagicMock()
-
             # Get router (creates singleton)
             router1 = get_router()
 

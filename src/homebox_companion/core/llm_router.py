@@ -122,6 +122,15 @@ _fallback_logger = FallbackLogger()
 
 # Module-level singleton
 _router: Router | None = None
+_router_revision: str | None = None
+
+
+def _get_profile_router(profile) -> Router:
+    global _router, _router_revision
+    if _router is None or _router_revision != profile.revision:
+        _router = _build_router_from_profiles(profile.credentials, profile.fallback)
+        _router_revision = profile.revision
+    return _router
 
 # Constant for primary model name used in Router configuration
 PRIMARY_MODEL_NAME = "primary"
@@ -147,6 +156,12 @@ def get_router() -> Router:
     Raises:
         ValueError: If no PRIMARY profile or env defaults are available.
     """
+    from ..ai.vision_profiles import current_profile, require_api_chat
+
+    pinned = current_profile.get()
+    if pinned is not None:
+        return pinned.router
+    require_api_chat()
     global _router
     if _router is None:
         _router = _build_router_from_profiles()
@@ -181,7 +196,7 @@ def get_primary_model_name() -> str:
     return PRIMARY_MODEL_NAME
 
 
-def _build_router_from_profiles() -> Router:
+def _build_router_from_profiles(primary_creds=None, fallback=None) -> Router:
     """Build Router from current PRIMARY and FALLBACK profiles.
 
     The Router's model_list is constructed with:
@@ -201,7 +216,11 @@ def _build_router_from_profiles() -> Router:
     model_list: list[dict[str, Any]] = []
 
     # Build primary deployment from resolved credentials
-    primary_creds = resolve_llm_credentials()
+    if primary_creds is None:
+        primary_creds = resolve_llm_credentials()
+        fallback = get_fallback_profile()
+    if fallback is not None and fallback.backend == "codex_cli":
+        fallback = None
 
     if not primary_creds.model:
         raise ValueError(
@@ -229,7 +248,6 @@ def _build_router_from_profiles() -> Router:
     )
 
     # Add fallback deployment if configured
-    fallback = get_fallback_profile()
     if fallback:
         fallback_params = _profile_to_params(fallback, inherit_key=primary_creds.api_key)
         model_list.append(

@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     image_quality: ImageQuality = ImageQuality.MEDIUM
 
     vision_backend: Literal["litellm", "codex_cli", "claude_cli"] = "litellm"
+    vision_worker_url: str = "http://host.docker.internal:8769"
+    vision_worker_token: SecretStr | None = None
+    vision_environment: Literal["dev", "qa"] = "dev"
+    vision_homebox_instance: str = ""
 
     # LLM request timeout (in seconds)
     llm_timeout: int = 120

@@ -11,11 +11,15 @@ ai/llm.py and chat/llm_client.py.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from loguru import logger
 
 from . import config
 from .persistent_settings import get_primary_profile
+
+if TYPE_CHECKING:
+    from .persistent_settings import ModelProfile
 
 
 @dataclass
@@ -35,7 +39,7 @@ class LLMCredentials:
     profile_name: str | None = None
 
 
-def resolve_llm_credentials() -> LLMCredentials:
+def resolve_llm_credentials(*, primary: ModelProfile | None = None, use_current_profile: bool = True) -> LLMCredentials:
     """Resolve LLM credentials using the unified priority order.
 
     Resolution priority:
@@ -51,7 +55,8 @@ def resolve_llm_credentials() -> LLMCredentials:
     api_base: str | None = None
 
     # Check for PRIMARY profile first
-    primary = get_primary_profile()
+    if use_current_profile:
+        primary = get_primary_profile()
     if primary:
         profile_name = primary.name
         model = primary.model

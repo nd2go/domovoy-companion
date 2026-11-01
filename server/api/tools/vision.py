@@ -7,7 +7,7 @@ import json
 import os
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from loguru import logger
 
 from homebox_companion import (
@@ -24,6 +24,7 @@ from homebox_companion.tools.vision.models import get_custom_fields_dict
 
 from ...dependencies import (
     VisionContext,
+    get_verified_gateway,
     get_vision_context,
     require_vision_ready,
     validate_file_size,
@@ -39,8 +40,31 @@ from ...schemas.vision import (
     DuplicateMatchResponse,
 )
 from ...services.duplicate_checker import DuplicateChecker
+from ...vision_runtime import CancelRequest
 
 router = APIRouter()
+
+
+@router.post("/cancel")
+async def cancel_analysis(request: Request, body: CancelRequest, gateway=Depends(get_verified_gateway)):
+    from ..inventory_schema import homebox
+
+    group = await homebox(gateway, "/groups")
+    active = getattr(request.app.state, "vision_active", None)
+    if (
+        active is None
+        or active.scope is None
+        or active.owner != gateway.access.identity_scope
+        or not isinstance(group, dict)
+        or group.get("id") != str(active.scope.collection_id)
+        or (gateway.access.group_id and gateway.access.group_id != group.get("id"))
+        or active.request_id != body.request_id
+        or active.scope.draft_id != body.draft_id
+        or active.scope.analysis_revision != body.analysis_revision
+    ):
+        return {"cancelled": False}
+    active.cancelled.set()
+    return {"cancelled": True}
 
 
 # Limit concurrent CPU-intensive compression to available cores.
