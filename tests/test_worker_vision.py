@@ -48,7 +48,17 @@ def setup_worker(monkeypatch, tmp_path):
     persistent_settings.clear_settings_cache()
     persistent_settings.save_settings(
         PersistentSettings(
-            llm_profiles=[ModelProfile(name="codex", model="", backend="codex_cli", status=ProfileStatus.PRIMARY)]
+            llm_profiles=[
+                ModelProfile(name="codex", model="", backend="codex_cli", status=ProfileStatus.PRIMARY),
+                ModelProfile(
+                    name="unused-api-fallback",
+                    model="gpt-5-mini",
+                    backend="litellm",
+                    api_key=SecretStr("never-send-this-key"),
+                    api_base="https://example.invalid",
+                    status=ProfileStatus.FALLBACK,
+                ),
+            ]
         )
     )
     buffer = io.BytesIO()
@@ -143,7 +153,11 @@ async def test_real_adapter_correlates_envelope_and_hashes(setup_worker):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "field", ["collection_id", "draft_id", "analysis_revision", "request_id", "backend", "quantity"]
+    "field",
+    [
+        "environment", "homebox_instance", "collection_id", "draft_id", "analysis_revision",
+        "request_id", "backend", "quantity", "version",
+    ],
 )
 async def test_changed_context_identity_or_type_is_rejected(setup_worker, field):
     f = setup_worker
@@ -153,8 +167,12 @@ async def test_changed_context_identity_or_type_is_rejected(setup_worker, field)
         response = original(request)
         if request.url.path == "/v1/vision":
             value = response.json()
-            if field in {"collection_id", "draft_id"}:
+            if field in {"homebox_instance", "collection_id", "draft_id"}:
                 value["context"][field] = str(uuid4())
+            elif field == "environment":
+                value["context"][field] = "qa"
+            elif field == "version":
+                value["vision"][field] = "2"
             elif field == "analysis_revision":
                 value["context"][field] = True
             elif field == "quantity":
@@ -320,6 +338,41 @@ async def test_admission_rejects_busy_before_reading_second_body(setup_worker):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("cancel", [True, False])
+async def test_admission_releases_after_cancel_or_timeout(setup_worker, cancel):
+    f = setup_worker
+    f.settings.llm_timeout = 1
+    app = FastAPI()
+    app.add_middleware(VisionAdmissionMiddleware, settings=f.settings)
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    @app.post("/api/tools/vision/detect")
+    async def detect(request: Request):
+        await request.body()
+        entered.set()
+        await release.wait()
+        return {"ok": True}
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+        first = asyncio.create_task(
+            client.post("/api/tools/vision/detect", headers={"X-Request-ID": str(uuid4())}, content=b"photo")
+        )
+        await asyncio.wait_for(entered.wait(), 2)
+        if cancel:
+            app.state.vision_active.cancelled.set()
+        response = await asyncio.wait_for(first, 3)
+        assert response.status_code == (409 if cancel else 504)
+        assert app.state.vision_active is None
+        release.set()
+        retry = await client.post(
+            "/api/tools/vision/detect", headers={"X-Request-ID": str(uuid4())}, content=b"photo"
+        )
+        assert retry.status_code == 200 and retry.json() == {"ok": True}
+        assert app.state.vision_active is None
+
+
+@pytest.mark.asyncio
 async def test_foreign_owner_cannot_cancel_active_request(setup_worker, monkeypatch):
     f = setup_worker
     from server.api import inventory_schema
@@ -404,7 +457,7 @@ async def test_profile_crud_keeps_legacy_data_and_rejects_cli_fallback(setup_wor
         assert switched.status_code == 200
         assert resolve_vision_profile().backend == "litellm"
         result = await client.get("/api/llm/profiles")
-        assert len(result.json()["profiles"]) == 2
+        assert len(result.json()["profiles"]) == 3
     assert f.calls == []
 
 
