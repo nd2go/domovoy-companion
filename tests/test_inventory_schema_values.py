@@ -117,3 +117,15 @@ def test_archived_block_is_not_projected():
     )
     schema["blocks"]["battery"]["archived"] = True
     assert "battery_platform" not in effective_fields(schema, "drill")
+
+
+def test_choice_labels_keep_stored_ids():
+    from homebox_companion.core.inventory_schema import check_evolution
+
+    schema = json.loads(
+        (Path(__file__).resolve().parents[1] / "src/homebox_companion/inventory_schema_seed.json").read_text()
+    )
+    before = copy.deepcopy(schema)
+    schema["fields"]["condition"]["option_labels"] = {"new": "Новое", "used": "Бывшее в использовании"}
+    check_evolution(before, schema)
+    assert encode_value(schema, "condition", "used") == "used"

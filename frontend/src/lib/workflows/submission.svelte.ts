@@ -10,6 +10,7 @@
  */
 
 import { items as itemsApi } from '$lib/api/index';
+import { inventorySchema } from '$lib/api/inventorySchema';
 import { ApiError } from '$lib/api/client';
 import { withRetry } from '$lib/utils/retry';
 import { workflowLogger as log } from '$lib/utils/logger';
@@ -215,6 +216,23 @@ export class SubmissionService {
 		this.itemStatuses = { ...this.itemStatuses, [index]: 'creating' };
 
 		try {
+			let customFields = confirmedItem.custom_fields;
+			let schemaRevision = confirmedItem.schema_revision;
+			let categoryId = confirmedItem.category_id;
+			if (schemaRevision === undefined) {
+				const registry = await inventorySchema.load(signal);
+				if (registry.schema) {
+					const category = (categoryId ?? customFields?.inventory_category) || null;
+					const checked = await inventorySchema.values(
+						registry.revision,
+						category,
+						customFields ?? {}
+					);
+					customFields = checked.values;
+					schemaRevision = checked.revision;
+					categoryId = category;
+				}
+			}
 			const itemInput: ItemInput = {
 				name: confirmedItem.name,
 				quantity: confirmedItem.quantity,
@@ -227,7 +245,9 @@ export class SubmissionService {
 				purchase_price: confirmedItem.purchase_price,
 				purchase_from: confirmedItem.purchase_from,
 				notes: confirmedItem.notes,
-				custom_fields: confirmedItem.custom_fields,
+				custom_fields: customFields,
+				schema_revision: schemaRevision,
+				category_id: categoryId,
 			};
 
 			const response = await itemsApi.create(

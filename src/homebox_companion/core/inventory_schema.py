@@ -70,7 +70,8 @@ def validate_schema(schema):
         decimal(unit.get("offset", "0"))
     for field in schema["fields"].values():
         check(
-            set(field) <= {"label", "kind", "unit", "options", "minimum", "maximum", "archived", "help"},
+            set(field)
+            <= {"label", "kind", "unit", "options", "option_labels", "minimum", "maximum", "archived", "help"},
             "Unknown field members",
         )
         check(isinstance(field.get("kind"), str) and field["kind"] in KINDS, "Invalid field type")
@@ -84,6 +85,10 @@ def validate_schema(schema):
         check(isinstance(options, list) and len(options) <= 100, "Invalid choices")
         check(all(isinstance(x, str) and ID.fullmatch(x) for x in options), "Invalid choice ID")
         check(len(options) == len(set(options)), "Duplicate choices")
+        labels = field.get("option_labels", {})
+        check(isinstance(labels, dict) and set(labels) <= set(options), "Invalid choice labels")
+        for label in labels.values():
+            text(label)
         check(not options or field["kind"] in ("choice", "choices"), "Unexpected choices")
         for bound in ("minimum", "maximum"):
             if bound in field:
