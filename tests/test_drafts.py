@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import base64
+import errno
 import hashlib
+import sqlite3
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import httpx
@@ -15,6 +18,28 @@ from homebox_companion.core.config import Settings
 from server.api.drafts import DraftScope, verified_scope
 from server.app import create_app
 from server.services import draft_store
+
+
+@pytest.mark.asyncio
+async def test_configured_instance_environment_and_verified_owner_define_scope(monkeypatch):
+    group = str(uuid4())
+    settings = SimpleNamespace(
+        api_url="http://homebox/api/v1", vision_homebox_instance=str(uuid4()), vision_environment="dev"
+    )
+    request = MagicMock()
+    request.app.state.settings = settings
+    gateway = MagicMock()
+    gateway.access = SimpleNamespace(group_id=group, identity_scope="owner")
+    monkeypatch.setattr("server.api.drafts.homebox", AsyncMock(return_value={"id": group}))
+    initial = await verified_scope(request, gateway)
+    settings.vision_homebox_instance = str(uuid4())
+    assert (await verified_scope(request, gateway)).key != initial.key
+    settings.vision_homebox_instance = initial.instance
+    settings.vision_environment = "qa"
+    assert (await verified_scope(request, gateway)).key != initial.key
+    settings.vision_environment = "dev"
+    gateway.access.identity_scope = "peer"
+    assert (await verified_scope(request, gateway)).key != initial.key
 
 
 @pytest.mark.asyncio
@@ -121,6 +146,44 @@ async def test_draft_rejects_unsafe_uploads_and_low_disk(tmp_path, monkeypatch):
         monkeypatch.setattr("server.api.drafts.shutil.disk_usage", lambda _: SimpleNamespace(free=0))
         assert (await client.put(url, files={"file": ("full.jpg", b"image", "image/jpeg")})).status_code == 507
         assert (await client.get(f"/api/drafts/{draft_id}")).json()["photos"] == []
+
+
+@pytest.mark.asyncio
+async def test_full_disk_during_file_creation_or_database_commit_is_explicit(tmp_path, monkeypatch):
+    monkeypatch.setattr(draft_store, "ROOT", tmp_path / "drafts")
+    monkeypatch.setattr(draft_store, "DB", draft_store.ROOT / "drafts.sqlite3")
+    monkeypatch.setattr(draft_store, "PHOTOS", draft_store.ROOT / "originals")
+    monkeypatch.setattr(draft_store, "DERIVED", draft_store.ROOT / "derived")
+    app = create_app(Settings(_env_file=None, homebox_api_key=SecretStr("hb_test"), disable_update_check=True))
+    app.dependency_overrides[verified_scope] = lambda: DraftScope("scope", "owner", "dev", "instance", "collection")
+    draft_id, photo_id = str(uuid4()), str(uuid4())
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app), base_url="http://test", headers={"X-Companion-Request": "1"}
+    ) as client:
+        await client.post("/api/drafts", json={"id": draft_id})
+
+        def no_space(*_args, **_kwargs):
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        with monkeypatch.context() as patch:
+            patch.setattr("server.api.drafts.tempfile.mkstemp", no_space)
+            response = await client.put(
+                f"/api/drafts/{draft_id}/photos/{photo_id}",
+                files={"file": ("item.jpg", b"\xff\xd8\xff image", "image/jpeg")},
+            )
+            assert response.status_code == 507
+        assert (await client.get(f"/api/drafts/{draft_id}")).json()["photos"] == []
+
+        def database_full(*_args):
+            error = sqlite3.OperationalError("database or disk is full")
+            error.sqlite_errorcode = sqlite3.SQLITE_FULL
+            raise error
+
+        with monkeypatch.context() as patch:
+            patch.setattr(draft_store, "update", database_full)
+            response = await client.patch(f"/api/drafts/{draft_id}", json={"revision": 0, "state": {"id": draft_id}})
+            assert response.status_code == 507
+        assert (await client.get(f"/api/drafts/{draft_id}")).json()["revision"] == 0
 
 
 @pytest.mark.asyncio

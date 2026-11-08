@@ -194,6 +194,10 @@
 
 	function handleFileSelect(e: Event) {
 		const input = e.target as HTMLInputElement;
+		if (isStartingAnalysis || showAnalyzingUI) {
+			input.value = '';
+			return;
+		}
 		if (!input.files) return;
 
 		// Track count locally for limit enforcement
@@ -229,6 +233,10 @@
 
 	function handleAdditionalImageSelect(imageIndex: number, e: Event) {
 		const input = e.target as HTMLInputElement;
+		if (isStartingAnalysis || showAnalyzingUI) {
+			input.value = '';
+			return;
+		}
 		if (!input.files) return;
 
 		const newFiles: File[] = [];

@@ -47,6 +47,9 @@ export interface StoredImage {
 
 /** Serializable version of ReviewItem */
 export interface StoredReviewItem extends ItemCore, ItemExtended {
+	custom_fields?: ReviewItem['custom_fields'];
+	originalPhotoId?: string | null;
+	additionalPhotoIds?: string[];
 	sourceImageIndex: number;
 	/** Original image filename for reconstruction */
 	originalFilename?: string;
@@ -83,6 +86,7 @@ export interface StoredSession {
 
 	// Images (fully serializable)
 	images: StoredImage[];
+	extraPhotos?: Pick<StoredImage, 'id' | 'filename' | 'mimeType' | 'dataUrl'>[];
 
 	// Review state (fully serializable)
 	detectedItems: StoredReviewItem[];
@@ -220,7 +224,7 @@ export async function serializeImage(img: CapturedImage): Promise<StoredImage> {
 
 /**
  * Serialize a ReviewItem to StoredReviewItem.
- * Strips out File objects (we rely on compressedDataUrl instead).
+ * The workflow stores photo references separately.
  */
 export function serializeReviewItem(item: ReviewItem): StoredReviewItem {
 	return {
@@ -237,6 +241,7 @@ export function serializeReviewItem(item: ReviewItem): StoredReviewItem {
 		purchase_from: item.purchase_from,
 		notes: item.notes,
 		asset_id: item.asset_id,
+		custom_fields: item.custom_fields,
 		// ReviewItem-specific fields
 		sourceImageIndex: item.sourceImageIndex,
 		originalFilename: item.originalFile?.name,
@@ -303,12 +308,20 @@ export async function deserializeImage(stored: StoredImage): Promise<CapturedIma
 
 /**
  * Deserialize a StoredReviewItem back to ReviewItem.
- * Reconstructs File objects from compressedDataUrl if available.
+ * Restore originals by ID. Older browser drafts can use embedded image data.
  */
-export async function deserializeReviewItem(stored: StoredReviewItem): Promise<ReviewItem> {
-	// Reconstruct originalFile from compressedDataUrl if we have it
+export async function deserializeReviewItem(
+	stored: StoredReviewItem,
+	photos?: Map<string, File>,
+	source?: CapturedImage
+): Promise<ReviewItem> {
 	let originalFile: File | undefined;
-	if (stored.compressedDataUrl && stored.originalFilename) {
+	if (stored.originalPhotoId !== undefined) {
+		originalFile = stored.originalPhotoId ? photos?.get(stored.originalPhotoId) : undefined;
+		if (stored.originalPhotoId && !originalFile) throw new Error('Original photo is missing');
+	} else if (source) {
+		originalFile = source.file;
+	} else if (stored.compressedDataUrl && stored.originalFilename) {
 		originalFile = await dataUrlToFile(
 			stored.compressedDataUrl,
 			stored.originalFilename,
@@ -322,9 +335,19 @@ export async function deserializeReviewItem(stored: StoredReviewItem): Promise<R
 		);
 	}
 
-	// Reconstruct additionalImages from compressedAdditionalDataUrls
 	let additionalImages: File[] | undefined;
-	if (stored.compressedAdditionalDataUrls && stored.compressedAdditionalDataUrls.length > 0) {
+	if (stored.additionalPhotoIds) {
+		additionalImages = stored.additionalPhotoIds.map((id) => {
+			const file = photos?.get(id);
+			if (!file) throw new Error('Additional original photo is missing');
+			return file;
+		});
+	} else if (source) {
+		additionalImages = source.additionalFiles;
+	} else if (
+		stored.compressedAdditionalDataUrls &&
+		stored.compressedAdditionalDataUrls.length > 0
+	) {
 		additionalImages = await Promise.all(
 			stored.compressedAdditionalDataUrls.map((url, i) =>
 				dataUrlToFile(url, `additional_${i}.jpg`, 'image/jpeg')
@@ -346,6 +369,7 @@ export async function deserializeReviewItem(stored: StoredReviewItem): Promise<R
 		purchase_from: stored.purchase_from,
 		notes: stored.notes,
 		asset_id: stored.asset_id,
+		custom_fields: stored.custom_fields,
 		// ReviewItem-specific fields
 		sourceImageIndex: stored.sourceImageIndex,
 		originalFile,
@@ -362,9 +386,11 @@ export async function deserializeReviewItem(stored: StoredReviewItem): Promise<R
  * Deserialize a StoredConfirmedItem back to ConfirmedItem.
  */
 export async function deserializeConfirmedItem(
-	stored: StoredConfirmedItem
+	stored: StoredConfirmedItem,
+	photos?: Map<string, File>,
+	source?: CapturedImage
 ): Promise<ConfirmedItem> {
-	const reviewItem = await deserializeReviewItem(stored);
+	const reviewItem = await deserializeReviewItem(stored, photos, source);
 	return {
 		...reviewItem,
 		confirmed: true,

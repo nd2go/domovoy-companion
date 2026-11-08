@@ -24,6 +24,10 @@ async function openSummary(
 		tags?: { id: string; name: string }[];
 		detectedItemFields?: Record<string, unknown>;
 		beforeConfirm?: (page: Page) => Promise<void>;
+		skipSubmit?: boolean;
+		compressedImages?: boolean;
+		duringDetection?: (page: Page) => Promise<void>;
+		failFirstUpload?: boolean;
 	} = {}
 ) {
 	if (options.authMode === 'legacy') {
@@ -34,6 +38,7 @@ async function openSummary(
 		}, options.selectedGroupId);
 	}
 	let expired = false;
+	let originalUploadFailed = false;
 	const draftRevisions = new Map<string, number>();
 	const savedDrafts = new Map<
 		string,
@@ -80,6 +85,12 @@ async function openSummary(
 			});
 		const draftMatch = path.match(/^\/api\/drafts\/([^/]+)(?:\/photos\/([^/]+))?$/);
 		if (draftMatch && request.method() === 'PUT') {
+			if (options.failFirstUpload && !originalUploadFailed) {
+				originalUploadFailed = true;
+				return route.fulfill(
+					json({ detail: 'Not enough space to retain the original photo' }, 507)
+				);
+			}
 			const photo = {
 				id: draftMatch[2],
 				filename: 'item.png',
@@ -167,6 +178,7 @@ async function openSummary(
 		}
 		if (path === '/api/field-preferences') return route.fulfill(json({ default_tag_id: null }));
 		if (path === '/api/tools/vision/detect') {
+			await options.duringDetection?.(page);
 			return route.fulfill(
 				json({
 					items: itemNames.map((name) => ({
@@ -175,7 +187,14 @@ async function openSummary(
 						description: `${name} photo`,
 						...options.detectedItemFields,
 					})),
-					compressed_images: [],
+					compressed_images: options.compressedImages
+						? [
+								{
+									mime_type: 'image/png',
+									data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+								},
+							]
+						: [],
 				})
 			);
 		}
@@ -235,13 +254,23 @@ async function openSummary(
 			),
 		});
 	await page.getByRole('button', { name: /Analyze with AI/ }).click();
+	if (options.failFirstUpload) {
+		await expect(
+			page.getByText('Not enough space to retain the original photo', { exact: true })
+		).toBeVisible();
+		await expect(page.getByAltText('Captured 1')).toBeVisible();
+		expect(
+			options.operations?.filter((operation) => operation.endsWith('/tools/vision/detect'))
+		).toHaveLength(0);
+		await page.getByRole('button', { name: /Analyze with AI/ }).click();
+	}
 	await expect(page).toHaveURL(/\/review$/);
 	await options.beforeConfirm?.(page);
 	for (let index = 0; index < itemNames.length; index++) {
 		await page.getByRole('button', { name: 'Confirm' }).click();
 	}
 	await expect(page).toHaveURL(/\/summary$/);
-	await page.getByRole('button', { name: /Submit All Items/ }).click();
+	if (!options.skipSubmit) await page.getByRole('button', { name: /Submit All Items/ }).click();
 }
 
 for (const rejected of [false, true]) {
@@ -491,6 +520,123 @@ test('server draft survives cleared IndexedDB', async ({ page }) => {
 	await page.getByRole('button', { name: 'Resume Session' }).click();
 	await expect(page).toHaveURL(/\/summary$/);
 	await expect(page.getByText('Bad lamp', { exact: true })).toBeVisible();
+});
+
+test('failed original upload keeps the photo and requires an explicit retry before analysis', async ({
+	page,
+}) => {
+	const operations: string[] = [];
+	await openSummary(page, ['Control bearing'], [], {
+		skipSubmit: true,
+		failFirstUpload: true,
+		operations,
+	});
+	expect(operations.filter((operation) => operation.endsWith('/tools/vision/detect'))).toHaveLength(
+		1
+	);
+});
+
+test('a late file selection cannot change an active analysis', async ({ page }) => {
+	let saved: any;
+	page.on('request', (request) => {
+		if (request.method() === 'PATCH' && request.url().includes('/api/drafts/'))
+			saved = request.postDataJSON().state;
+	});
+	await openSummary(page, ['Control bearing'], [], {
+		skipSubmit: true,
+		duringDetection: async (page) => {
+			await page
+				.locator('input[type="file"]')
+				.first()
+				.setInputFiles({
+					name: 'late.png',
+					mimeType: 'image/png',
+					buffer: Buffer.from(
+						'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+						'base64'
+					),
+				});
+		},
+	});
+	await expect.poll(() => saved?.status).toBe('confirming');
+	expect(saved.images).toHaveLength(1);
+	expect(saved.images[0].filename).toBe('item.png');
+});
+
+test('server recovery retains compressed photos and custom fields through confirmation', async ({
+	page,
+}) => {
+	const pageErrors: string[] = [];
+	page.on('pageerror', (error) => pageErrors.push(error.message));
+	const states: Record<string, any>[] = [];
+	page.on('request', (request) => {
+		if (request.method() === 'PATCH' && request.url().includes('/api/drafts/'))
+			states.push(request.postDataJSON().state);
+	});
+	await openSummary(page, ['Control bearing'], [], {
+		skipSubmit: true,
+		compressedImages: true,
+		detectedItemFields: { custom_fields: { 'Control Note': 'Reviewed value' } },
+	});
+	await expect.poll(() => states.at(-1)?.status).toBe('confirming');
+	const item = states.at(-1)!.confirmedItems[0];
+	expect(item.compressedDataUrl).toMatch(/^draft-derived:[0-9a-f]{64}$/);
+	expect(item.originalPhotoId).toBe(states.at(-1)!.images[0].id);
+	expect(item.custom_fields).toEqual({ 'Control Note': 'Reviewed value' });
+	await page.reload();
+	await page.getByRole('button', { name: 'Resume Session' }).click();
+	await expect(page).toHaveURL(/\/summary$/);
+	const submitted = page.waitForRequest(
+		(request) => request.url().endsWith('/api/items') && request.method() === 'POST'
+	);
+	await page.getByRole('button', { name: /Submit All Items/ }).click();
+	expect((await submitted).postDataJSON().items[0].custom_fields).toEqual({
+		'Control Note': 'Reviewed value',
+	});
+	await expect(page).toHaveURL(/\/success$/);
+	expect(pageErrors).toEqual([]);
+});
+
+test('photos added and removed during review survive server recovery', async ({ page }) => {
+	let saved: any;
+	page.on('request', (request) => {
+		if (request.method() === 'PATCH' && request.url().includes('/api/drafts/'))
+			saved = request.postDataJSON().state;
+	});
+	await openSummary(page, ['Control camera'], [], {
+		skipSubmit: true,
+		beforeConfirm: async (page) => {
+			await page.getByRole('button', { name: 'Attached Photos 1' }).click();
+			await page.getByRole('button', { name: 'Remove image' }).click();
+			await page
+				.locator('input[type="file"]')
+				.first()
+				.setInputFiles({
+					name: 'replacement.png',
+					mimeType: 'image/png',
+					buffer: Buffer.from(
+						'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+						'base64'
+					),
+				});
+		},
+	});
+	await expect.poll(() => saved?.status).toBe('confirming');
+	expect(saved.extraPhotos).toHaveLength(1);
+	expect(saved.confirmedItems[0].originalPhotoId).toBe(saved.extraPhotos[0].id);
+	expect(saved.confirmedItems[0].originalPhotoId).not.toBe(saved.images[0].id);
+	await page.reload();
+	await page.getByRole('button', { name: 'Resume Session' }).click();
+	await page.getByRole('button', { name: 'Edit item', exact: true }).click();
+	await page.getByRole('button', { name: 'Attached Photos 1' }).click();
+	await expect(page.getByAltText('Photo 1', { exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Remove image' }).click();
+	await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+	await expect.poll(() => saved?.confirmedItems[0]?.originalPhotoId).toBeNull();
+	await page.reload();
+	await page.getByRole('button', { name: 'Resume Session' }).click();
+	await page.getByRole('button', { name: 'Edit item', exact: true }).click();
+	await expect(page.getByText('Add photos below')).toBeVisible();
 });
 
 test('browser draft migrates after server lookup has no draft', async ({ page }) => {

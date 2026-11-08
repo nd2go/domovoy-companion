@@ -337,7 +337,9 @@
 				showToast('Session recovered!', 'success');
 				// Navigate based on recovered status
 				const status = scanWorkflow.state.status;
-				if (status === 'reviewing' || status === 'confirming') {
+				if (status === 'confirming') {
+					await goto(resolve('/summary'));
+				} else if (status === 'reviewing') {
 					goto(resolve('/review'));
 				} else if (status === 'capturing' || status === 'partial_analysis') {
 					goto(resolve('/capture'));
@@ -369,7 +371,11 @@
 				hasRecovery = false;
 				legacyRecoverySummary = null;
 				const status = scanWorkflow.state.status;
-				goto(resolve(status === 'reviewing' || status === 'confirming' ? '/review' : '/capture'));
+				await goto(
+					resolve(
+						status === 'confirming' ? '/summary' : status === 'reviewing' ? '/review' : '/capture'
+					)
+				);
 			} else {
 				showToast('Could not recover the browser draft', 'error');
 			}
