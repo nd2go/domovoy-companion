@@ -66,9 +66,6 @@
 	let allImages = $state<File[]>([]);
 	let showConfirmAllDialog = $state(false);
 
-	// Track original images to detect modifications (for invalidating compressed URLs)
-	let originalImageSet = $state<Set<File>>(new Set());
-
 	// Check if item has any extended field data
 	function hasExtendedFieldData(item: ReviewItem | null): boolean {
 		if (!item) return false;
@@ -198,23 +195,12 @@
 
 		// Check if images were modified (added, removed, or reordered)
 		// If so, compressed URLs are stale and must be cleared
-		const imagesModified = (() => {
-			// Check if count changed
-			if (allImages.length !== originalImageSet.size) return true;
-			// Check if any image was removed or a new one added
-			for (const img of allImages) {
-				if (!originalImageSet.has(img)) return true;
-			}
-			// Check if order changed - compare full array order, not just primary
-			// This ensures reordering additional images also invalidates compressed data
-			const originalArray = currentItem?.originalFile
-				? [currentItem.originalFile, ...(currentItem.additionalImages || [])]
-				: [];
-			for (let i = 0; i < allImages.length; i++) {
-				if (allImages[i] !== originalArray[i]) return true;
-			}
-			return false;
-		})();
+		const originalArray = currentItem?.originalFile
+			? [currentItem.originalFile, ...(currentItem.additionalImages || [])]
+			: [];
+		const imagesModified =
+			allImages.length !== originalArray.length ||
+			allImages.some((image, index) => image !== originalArray[index]);
 
 		// Sync unified allImages back to item structure
 		// First image becomes "original", rest become "additional"

@@ -37,7 +37,20 @@ async function mockApi(
 		const request = route.request();
 		options.requests?.push(request);
 		const path = new URL(request.url()).pathname;
-		if (path === '/api/llm/readiness') return route.fulfill(json({ backend: 'litellm', ready: true, model: 'test', reason: null, profile_revision: 'test', timeout_seconds: 120, max_parallelism: 30, chat_available: true }));
+		if (path === '/api/drafts' && request.method() === 'GET') return route.fulfill(json([]));
+		if (path === '/api/llm/readiness')
+			return route.fulfill(
+				json({
+					backend: 'litellm',
+					ready: true,
+					model: 'test',
+					reason: null,
+					profile_revision: 'test',
+					timeout_seconds: 120,
+					max_parallelism: 30,
+					chat_available: true,
+				})
+			);
 		if (path === '/api/config') return route.fulfill(json(config(mode)));
 		if (path === '/api/homebox/connection') {
 			const status = options.connectionStatus?.() ?? 200;

@@ -194,6 +194,10 @@
 
 	function handleFileSelect(e: Event) {
 		const input = e.target as HTMLInputElement;
+		if (isStartingAnalysis || showAnalyzingUI) {
+			input.value = '';
+			return;
+		}
 		if (!input.files) return;
 
 		// Track count locally for limit enforcement
@@ -229,6 +233,10 @@
 
 	function handleAdditionalImageSelect(imageIndex: number, e: Event) {
 		const input = e.target as HTMLInputElement;
+		if (isStartingAnalysis || showAnalyzingUI) {
+			input.value = '';
+			return;
+		}
 		if (!input.files) return;
 
 		const newFiles: File[] = [];
@@ -411,7 +419,7 @@
 			setTimeout(() => {
 				window.scrollTo({ top: 0, behavior: 'smooth' });
 			}, 100);
-			await workflow.startAnalysis();
+			await workflow.startAnalysis(() => showToast('Original photos saved on server', 'success'));
 			log.debug('Workflow.startAnalysis() completed');
 		} catch (error) {
 			// Error logging
@@ -930,7 +938,7 @@
 				onclick={startAnalysis}
 			>
 				{#if isStartingAnalysis}
-					<span>Starting...</span>
+					<span>Saving original photos...</span>
 				{:else}
 					<span>Analyze with AI</span>
 				{/if}

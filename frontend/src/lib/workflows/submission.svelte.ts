@@ -386,7 +386,7 @@ export class SubmissionService {
 		items: ConfirmedItem[],
 		locationId: string | null,
 		parentId: string | null,
-		options?: { validateAuth?: boolean }
+		options?: { validateAuth?: boolean; onCheckpoint?: () => Promise<void> }
 	): Promise<SubmitResult> {
 		const result: SubmitResult = {
 			success: false,
@@ -430,6 +430,7 @@ export class SubmissionService {
 		const signal = this.abortController?.signal;
 
 		try {
+			await options?.onCheckpoint?.();
 			for (let i = 0; i < items.length; i++) {
 				if (signal?.aborted) {
 					return result;
@@ -466,6 +467,7 @@ export class SubmissionService {
 					total: items.length,
 					message: `Created ${result.successCount + result.partialSuccessCount} of ${items.length}...`,
 				};
+				await options?.onCheckpoint?.();
 			}
 
 			// Determine overall success
@@ -519,7 +521,8 @@ export class SubmissionService {
 	async retryFailed(
 		items: ConfirmedItem[],
 		locationId: string | null,
-		parentId: string | null
+		parentId: string | null,
+		onCheckpoint?: () => Promise<void>
 	): Promise<SubmitResult> {
 		const result: SubmitResult = {
 			success: false,
@@ -573,6 +576,7 @@ export class SubmissionService {
 						result.errors.push(`Failed to create '${items[i].name}'`);
 					}
 				}
+				await onCheckpoint?.();
 			}
 
 			// Check if all items are now successful

@@ -58,6 +58,8 @@
 	// Session recovery state
 	let hasRecovery = $state(false);
 	let recoverySummary = $state<SessionSummary | null>(null);
+	let serverRecoveryOptions = $state<{ id: string; summary: SessionSummary }[]>([]);
+	let legacyRecoverySummary = $state<SessionSummary | null>(null);
 	let isRecovering = $state(false);
 	let isProcessingQr = $state(false);
 
@@ -101,7 +103,9 @@
 		try {
 			hasRecovery = await scanWorkflow.hasRecoverableSession();
 			if (hasRecovery) {
+				serverRecoveryOptions = scanWorkflow.getServerRecoveryOptions();
 				recoverySummary = await scanWorkflow.getRecoverySummary();
+				legacyRecoverySummary = await scanWorkflow.getLegacyRecoverySummary();
 			}
 		} catch (err) {
 			log.warn('Failed to check for recoverable session:', err);
@@ -318,6 +322,11 @@
 	}
 
 	// Session recovery handlers
+	async function handleResumeServer(id: string) {
+		scanWorkflow.selectServerRecovery(id);
+		await handleResumeSession();
+	}
+
 	async function handleResumeSession() {
 		isRecovering = true;
 		try {
@@ -328,7 +337,9 @@
 				showToast('Session recovered!', 'success');
 				// Navigate based on recovered status
 				const status = scanWorkflow.state.status;
-				if (status === 'reviewing' || status === 'confirming') {
+				if (status === 'confirming') {
+					await goto(resolve('/summary'));
+				} else if (status === 'reviewing') {
 					goto(resolve('/review'));
 				} else if (status === 'capturing' || status === 'partial_analysis') {
 					goto(resolve('/capture'));
@@ -347,10 +358,33 @@
 	}
 
 	async function handleDismissRecovery() {
-		await scanWorkflow.clearPersistedSession();
 		hasRecovery = false;
 		recoverySummary = null;
-		showToast('Previous session cleared', 'info');
+		legacyRecoverySummary = null;
+		showToast('Draft kept for later', 'info');
+	}
+
+	async function handleResumeLegacy() {
+		isRecovering = true;
+		try {
+			if (await scanWorkflow.recoverLegacy()) {
+				hasRecovery = false;
+				legacyRecoverySummary = null;
+				const status = scanWorkflow.state.status;
+				await goto(
+					resolve(
+						status === 'confirming' ? '/summary' : status === 'reviewing' ? '/review' : '/capture'
+					)
+				);
+			} else {
+				showToast('Could not recover the browser draft', 'error');
+			}
+		} catch (error) {
+			log.error('Legacy recovery failed:', error);
+			showToast('Could not import the browser draft. It is still stored locally.', 'error');
+		} finally {
+			isRecovering = false;
+		}
 	}
 </script>
 
@@ -368,11 +402,32 @@
 		<h2 class="mb-1 text-h2 text-neutral-100">Select Location</h2>
 		<p class="mb-6 text-body-sm text-neutral-400">Choose where your items will be stored</p>
 
-		{#if hasRecovery && recoverySummary && !locationStore.selected}
+		{#each serverRecoveryOptions as option (option.id)}
+			{#if hasRecovery && !locationStore.selected}
+				<RecoveryBanner
+					title="Server draft"
+					summary={option.summary}
+					onResume={() => handleResumeServer(option.id)}
+					onDismiss={handleDismissRecovery}
+					loading={isRecovering}
+				/>
+			{/if}
+		{/each}
+		{#if hasRecovery && recoverySummary && serverRecoveryOptions.length === 0 && !locationStore.selected}
 			<RecoveryBanner
+				title="Browser draft"
 				summary={recoverySummary}
 				onResume={handleResumeSession}
 				onDismiss={handleDismissRecovery}
+				loading={isRecovering}
+			/>
+		{/if}
+		{#if legacyRecoverySummary && !locationStore.selected}
+			<RecoveryBanner
+				title="Browser draft"
+				summary={legacyRecoverySummary}
+				onResume={handleResumeLegacy}
+				onDismiss={() => (legacyRecoverySummary = null)}
 				loading={isRecovering}
 			/>
 		{/if}

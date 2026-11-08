@@ -23,9 +23,27 @@ async function setup(
 ) {
 	const calls: { path: string; headers: Record<string, string>; body: unknown }[] = [];
 	const profiles: Record<string, unknown>[] = [];
+	const draftRevisions = new Map<string, number>();
 	await page.route('**/api/**', async (route) => {
 		const request = route.request();
 		const path = new URL(request.url()).pathname;
+		if (path === '/api/drafts' && request.method() === 'GET') return route.fulfill(json([]));
+		if (path === '/api/drafts' && request.method() === 'POST') {
+			const id = request.postDataJSON().id as string;
+			const revision = draftRevisions.get(id) ?? 0;
+			draftRevisions.set(id, revision);
+			return route.fulfill(json({ id, revision, photos: [], state: {} }, 201));
+		}
+		const draftMatch = path.match(/^\/api\/drafts\/([^/]+)(?:\/photos\/([^/]+))?$/);
+		if (draftMatch && request.method() === 'PUT')
+			return route.fulfill(json({ id: draftMatch[2], checksum: 'synthetic', size: 1 }));
+		if (draftMatch && request.method() === 'PATCH') {
+			const revision = (draftRevisions.get(draftMatch[1]) ?? 0) + 1;
+			draftRevisions.set(draftMatch[1], revision);
+			return route.fulfill(
+				json({ id: draftMatch[1], revision, photos: [], state: request.postDataJSON().state })
+			);
+		}
 		calls.push({ path, headers: request.headers(), body: request.postData() });
 		if (path === '/api/config')
 			return route.fulfill(

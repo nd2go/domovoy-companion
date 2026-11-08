@@ -37,8 +37,11 @@ import {
 	deserializeImage,
 	deserializeReviewItem,
 	deserializeConfirmedItem,
+	dataUrlToFile,
+	fileToDataUrl,
 } from '$lib/services/serialize';
 import * as sessionPersistence from '$lib/services/sessionPersistence';
+import { drafts, type ServerDraft } from '$lib/api/drafts';
 
 // =============================================================================
 // CONSTANTS
@@ -98,6 +101,13 @@ class ScanWorkflow {
 	/** Flag to skip the initial effect run (avoids persist on construction) */
 	private _isFirstEffectRun = true;
 	private contextGeneration = 0;
+	private serverRevision: number | null = null;
+	private acceptedPhotoIds = new Set<string>();
+	private photoIds = new WeakMap<File, string>();
+	private serverWrite: Promise<void> = Promise.resolve();
+	private serverRecovery: ServerDraft | null = null;
+	private serverRecoveries: ServerDraft[] = [];
+	private legacyRecovery: StoredSession | null = null;
 
 	/** Confirmed-item index currently being edited after a failed submission. */
 	private failedItemEditIndex = $state<number | null>(null);
@@ -492,12 +502,39 @@ class ScanWorkflow {
 		this.captureService.clear();
 	}
 
+	private async retainOriginals(): Promise<void> {
+		const generation = this.contextGeneration;
+		const draftId = visionSession.draftId;
+		const remote = await drafts.create(draftId);
+		if (generation !== this.contextGeneration)
+			throw new Error('The collection changed during photo upload');
+		if (this.serverRevision === null) this.serverRevision = remote.revision;
+		for (const image of this.captureService.images) {
+			image.id ??= crypto.randomUUID();
+			if (!this.acceptedPhotoIds.has(image.id)) {
+				await drafts.upload(draftId, image.id, image.file);
+				this.acceptedPhotoIds.add(image.id);
+			}
+			image.additionalIds ??= image.additionalFiles?.map(() => crypto.randomUUID()) ?? [];
+			for (const [index, file] of (image.additionalFiles ?? []).entries()) {
+				const id = image.additionalIds[index];
+				if (!id) throw new Error('Photo ID is missing');
+				if (!this.acceptedPhotoIds.has(id)) {
+					await drafts.upload(draftId, id, file);
+					this.acceptedPhotoIds.add(id);
+				}
+			}
+			if (generation !== this.contextGeneration)
+				throw new Error('The collection changed during photo upload');
+		}
+	}
+
 	// =========================================================================
 	// ANALYSIS (delegated to AnalysisService)
 	// =========================================================================
 
 	/** Start image analysis - coordinates with AnalysisService */
-	async startAnalysis(): Promise<void> {
+	async startAnalysis(onSaved?: () => void): Promise<void> {
 		log.info('ScanWorkflow.startAnalysis() called');
 
 		// Prevent starting a new analysis if one is already in progress
@@ -510,6 +547,15 @@ class ScanWorkflow {
 		if (!this.captureService.hasImages) {
 			log.warn('No images to analyze, returning early');
 			this._error = 'Please add at least one image';
+			return;
+		}
+
+		try {
+			await this.retainOriginals();
+			await this.persistAsync();
+			onSaved?.();
+		} catch (error) {
+			this._error = error instanceof Error ? error.message : 'Could not save original photos';
 			return;
 		}
 
@@ -911,7 +957,7 @@ class ScanWorkflow {
 			items,
 			this._locationId,
 			this._parentItemId,
-			options
+			{ ...options, onCheckpoint: () => this.persistAsync() }
 		);
 		if (generation !== this.contextGeneration) return result;
 
@@ -931,11 +977,11 @@ class ScanWorkflow {
 			this._error = `${result.partialSuccessCount} item(s) created with incomplete details or attachments`;
 			this.submissionService.saveResult(items, this._locationName, this._locationId);
 			this._status = 'complete';
-			await this.clearPersistedSession();
+			await this.completeDraft();
 		} else if (result.success) {
 			this.submissionService.saveResult(items, this._locationName, this._locationId);
 			this._status = 'complete';
-			await this.clearPersistedSession();
+			await this.completeDraft();
 		}
 
 		if (this._status !== 'complete') await this.persistAsync();
@@ -974,7 +1020,8 @@ class ScanWorkflow {
 		const result = await this.submissionService.retryFailed(
 			items,
 			this._locationId,
-			this._parentItemId
+			this._parentItemId,
+			() => this.persistAsync()
 		);
 		if (generation !== this.contextGeneration) return result;
 
@@ -987,7 +1034,7 @@ class ScanWorkflow {
 		if (this.submissionService.allItemsSuccessful()) {
 			this.submissionService.saveResult(items, this._locationName, this._locationId);
 			this._status = 'complete';
-			await this.clearPersistedSession();
+			await this.completeDraft();
 		} else if (result.failCount > 0) {
 			this._error = `Retried: ${result.successCount + result.partialSuccessCount} succeeded, ${result.failCount} still failing`;
 		}
@@ -1022,22 +1069,133 @@ class ScanWorkflow {
 			return;
 		}
 
-		await this._doPersist();
+		await this._doPersist(true);
+	}
+
+	private async serverState(session: StoredSession): Promise<StoredSession> {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Local upload cache does not affect UI state
+		const uploads = new Map<string, Promise<string>>();
+		const saveRequired = (value: string): Promise<string> => {
+			let upload = uploads.get(value);
+			if (!upload) {
+				upload = drafts.derivedUpload(session.id, value);
+				uploads.set(value, upload);
+			}
+			return upload;
+		};
+		const save = async (value?: string): Promise<string | undefined> =>
+			value ? saveRequired(value) : undefined;
+		const items = async <T extends StoredSession['detectedItems'][number]>(
+			values: T[]
+		): Promise<T[]> =>
+			Promise.all(
+				values.map(
+					async (item) =>
+						({
+							...item,
+							compressedDataUrl: await save(item.compressedDataUrl),
+							compressedAdditionalDataUrls: item.compressedAdditionalDataUrls
+								? await Promise.all(item.compressedAdditionalDataUrls.map(saveRequired))
+								: undefined,
+							customThumbnail: await save(item.customThumbnail),
+							thumbnailTransform: item.thumbnailTransform
+								? {
+										...item.thumbnailTransform,
+										dataUrl: (await save(item.thumbnailTransform.dataUrl ?? undefined)) ?? null,
+									}
+								: undefined,
+						}) as T
+				)
+			);
+		return {
+			...session,
+			images: session.images.map((image) => ({ ...image, dataUrl: '', additionalDataUrls: [] })),
+			extraPhotos: session.extraPhotos?.map((photo) => ({ ...photo, dataUrl: '' })),
+			detectedItems: await items(session.detectedItems),
+			confirmedItems: await items(session.confirmedItems),
+		};
+	}
+
+	private async syncServer(session: StoredSession, strict = false): Promise<void> {
+		const allIds = session.images.flatMap((image) => [image.id, ...(image.additionalIds ?? [])]);
+		if (!allIds.length) return;
+		if (allIds.some((id) => !this.acceptedPhotoIds.has(id))) {
+			if (strict) throw new Error('Original photos must be saved before continuing.');
+			return;
+		}
+		const generation = this.contextGeneration;
+		const write = this.serverWrite.then(async () => {
+			if (generation !== this.contextGeneration) return;
+			const remote = await drafts.create(session.id);
+			for (const photo of session.extraPhotos ?? []) {
+				if (!this.acceptedPhotoIds.has(photo.id)) {
+					await drafts.upload(
+						session.id,
+						photo.id,
+						await dataUrlToFile(photo.dataUrl, photo.filename, photo.mimeType)
+					);
+					this.acceptedPhotoIds.add(photo.id);
+				}
+			}
+			const state = await this.serverState(session);
+			if (this.serverRevision !== null && remote.revision !== this.serverRevision) {
+				throw new Error('Draft changed in another tab. Reopen it before saving.');
+			}
+			const updated = await drafts.update(session.id, remote.revision, state);
+			if (generation === this.contextGeneration) this.serverRevision = updated.revision;
+		});
+		this.serverWrite = write.catch(() => {});
+		await write;
 	}
 
 	/**
 	 * Internal persist implementation - serializes and saves to IndexedDB.
 	 */
-	private async _doPersist(): Promise<void> {
+	private async _doPersist(strict = false): Promise<void> {
 		log.debug('_doPersist: Starting session persistence...');
 		const scope = sessionPersistence.captureSessionScope();
 		const generation = this.contextGeneration;
-		if (!scope) return;
+		if (!scope) {
+			if (strict) throw new Error('Verified collection is not available');
+			return;
+		}
 
 		try {
 			// Step 1: Serialize images (convert File objects to base64)
 			log.debug(`_doPersist: Serializing ${this.captureService.images.length} image(s)...`);
 			const images = await Promise.all(this.captureService.images.map(serializeImage));
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Snapshot lookup does not affect UI state
+			const captureIds = new Set<string>();
+			this.captureService.images.forEach((image, index) => {
+				this.photoIds.set(image.file, images[index].id);
+				captureIds.add(images[index].id);
+				image.additionalFiles?.forEach((file, additionalIndex) => {
+					const id = images[index].additionalIds?.[additionalIndex];
+					if (id) {
+						this.photoIds.set(file, id);
+						captureIds.add(id);
+					}
+				});
+			});
+			const extraPhotos: NonNullable<StoredSession['extraPhotos']> = [];
+			const photoId = async (file: File): Promise<string> => {
+				let id = this.photoIds.get(file);
+				if (!id) {
+					id = crypto.randomUUID();
+					this.photoIds.set(file, id);
+				}
+				if (!captureIds.has(id) && !extraPhotos.some((photo) => photo.id === id)) {
+					const photo = { id, filename: file.name, mimeType: file.type, dataUrl: '' };
+					extraPhotos.push(photo);
+					photo.dataUrl = await fileToDataUrl(file);
+				}
+				return id;
+			};
+			const serializeItem = async (item: ReviewItem | ConfirmedItem) => ({
+				...('confirmed' in item ? serializeConfirmedItem(item) : serializeReviewItem(item)),
+				originalPhotoId: item.originalFile ? await photoId(item.originalFile) : null,
+				additionalPhotoIds: await Promise.all((item.additionalImages ?? []).map(photoId)),
+			});
 			log.debug(`_doPersist: Images serialized successfully`);
 
 			// Step 2: Serialize review items (strip File references)
@@ -1047,10 +1205,10 @@ class ScanWorkflow {
 				`_doPersist: Serializing ${this.reviewService.detectedItems.length} detected, ${this.reviewService.confirmedItems.length} confirmed items...`
 			);
 			const detectedItems = JSON.parse(
-				JSON.stringify(this.reviewService.detectedItems.map(serializeReviewItem))
+				JSON.stringify(await Promise.all(this.reviewService.detectedItems.map(serializeItem)))
 			);
 			const confirmedItems = JSON.parse(
-				JSON.stringify(this.reviewService.confirmedItems.map(serializeConfirmedItem))
+				JSON.stringify(await Promise.all(this.reviewService.confirmedItems.map(serializeItem)))
 			);
 			log.debug('_doPersist: Review items serialized successfully');
 
@@ -1084,6 +1242,7 @@ class ScanWorkflow {
 				parentItemId: this._parentItemId,
 				parentItemName: this._parentItemName,
 				images,
+				extraPhotos,
 				detectedItems,
 				confirmedItems,
 				currentReviewIndex: this.reviewService.currentReviewIndex,
@@ -1097,7 +1256,8 @@ class ScanWorkflow {
 				log.debug('_doPersist: Context changed during serialization, discarding stale write');
 				return;
 			}
-			await sessionPersistence.save(session, scope);
+			await sessionPersistence.save(session, scope, strict);
+			await this.syncServer(session, strict);
 			log.debug(
 				`_doPersist: SUCCESS - status=${this._status}, images=${images.length}, detected=${detectedItems.length}, confirmed=${confirmedItems.length}`
 			);
@@ -1111,7 +1271,123 @@ class ScanWorkflow {
 			if (errorStack) {
 				log.debug(`_doPersist: Stack trace: ${errorStack}`);
 			}
+			if (strict) throw error;
 		}
+	}
+
+	private async importLegacy(session: StoredSession): Promise<ServerDraft> {
+		for (const image of session.images) {
+			image.additionalIds ??= image.additionalDataUrls?.map(() => crypto.randomUUID()) ?? [];
+		}
+		await sessionPersistence.save(session, sessionPersistence.captureSessionScope(), true);
+		const remote = await drafts.create(session.id);
+		for (const image of session.images) {
+			await drafts.upload(
+				session.id,
+				image.id,
+				await dataUrlToFile(image.dataUrl, image.filename, image.mimeType)
+			);
+			for (const [index, dataUrl] of (image.additionalDataUrls ?? []).entries()) {
+				const photoId = image.additionalIds?.[index];
+				if (!photoId) throw new Error('Additional photo ID is missing');
+				const file = await dataUrlToFile(
+					dataUrl,
+					image.additionalFilenames?.[index] ?? `additional_${index}.jpg`,
+					image.additionalMimeTypes?.[index]
+				);
+				await drafts.upload(session.id, photoId, file);
+			}
+		}
+		for (const photo of session.extraPhotos ?? []) {
+			await drafts.upload(
+				session.id,
+				photo.id,
+				await dataUrlToFile(photo.dataUrl, photo.filename, photo.mimeType)
+			);
+		}
+		const state = await this.serverState(session);
+		return drafts.update(session.id, remote.revision, state);
+	}
+
+	private async hydrateServer(draft: ServerDraft): Promise<StoredSession> {
+		const state = draft.state as StoredSession;
+		if (!state.id || !Array.isArray(state.images) || !state.status) {
+			throw new Error('Server draft has no recoverable state');
+		}
+		const photos = new Map(draft.photos.map((photo) => [photo.id, photo]));
+		const images: StoredSession['images'] = [];
+		for (const image of state.images) {
+			const primary = photos.get(image.id);
+			if (!primary) throw new Error('Server draft is missing an original photo');
+			const file = await drafts.original(draft.id, image.id, primary);
+			const additionalDataUrls: string[] = [];
+			for (const id of image.additionalIds ?? []) {
+				const photo = photos.get(id);
+				if (!photo) throw new Error('Server draft is missing an additional photo');
+				additionalDataUrls.push(await fileToDataUrl(await drafts.original(draft.id, id, photo)));
+			}
+			images.push({ ...image, dataUrl: await fileToDataUrl(file), additionalDataUrls });
+		}
+		const extraPhotos = await Promise.all(
+			(state.extraPhotos ?? []).map(async (photo) => {
+				const metadata = photos.get(photo.id);
+				if (!metadata) throw new Error('Server draft is missing a review photo');
+				return {
+					...photo,
+					dataUrl: await fileToDataUrl(await drafts.original(draft.id, photo.id, metadata)),
+				};
+			})
+		);
+		const withOriginal = async <T extends StoredSession['detectedItems'][number]>(
+			items: T[]
+		): Promise<T[]> =>
+			Promise.all(
+				items.map(
+					async (item) =>
+						({
+							...item,
+							compressedDataUrl: item.compressedDataUrl
+								? await drafts.derived(draft.id, item.compressedDataUrl)
+								: undefined,
+							compressedAdditionalDataUrls: item.compressedAdditionalDataUrls
+								? await Promise.all(
+										item.compressedAdditionalDataUrls.map((value) =>
+											drafts.derived(draft.id, value)
+										)
+									)
+								: undefined,
+							customThumbnail: item.customThumbnail
+								? await drafts.derived(draft.id, item.customThumbnail)
+								: undefined,
+							thumbnailTransform: item.thumbnailTransform
+								? {
+										...item.thumbnailTransform,
+										dataUrl: item.thumbnailTransform.dataUrl
+											? await drafts.derived(draft.id, item.thumbnailTransform.dataUrl)
+											: null,
+									}
+								: undefined,
+						}) as T
+				)
+			);
+		return {
+			...state,
+			images,
+			extraPhotos,
+			detectedItems: await withOriginal(state.detectedItems ?? []),
+			confirmedItems: await withOriginal(state.confirmedItems ?? []),
+		};
+	}
+
+	private summaryFromServer(draft: ServerDraft): sessionPersistence.SessionSummary {
+		const state = draft.state;
+		return {
+			ageText: 'from the server',
+			imageCount: state.images?.length ?? draft.photos.length,
+			locationName: state.locationName ?? null,
+			status: state.status ?? 'capturing',
+			confirmedCount: state.confirmedItems?.length ?? 0,
+		};
 	}
 
 	/**
@@ -1123,7 +1399,9 @@ class ScanWorkflow {
 		const generation = this.contextGeneration;
 		if (!scope) return false;
 		try {
-			const session = await sessionPersistence.load(scope);
+			const session = this.serverRecovery
+				? await this.hydrateServer(this.serverRecovery)
+				: await sessionPersistence.load(scope);
 			if (!session) {
 				return false;
 			}
@@ -1142,17 +1420,36 @@ class ScanWorkflow {
 			const images = await Promise.all(session.images.map(deserializeImage));
 			if (generation !== this.contextGeneration) return false;
 			this.captureService.images = images;
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Recovery lookup does not affect UI state
+			const photos = new Map<string, File>();
+			for (const image of images) {
+				if (image.id) photos.set(image.id, image.file);
+				image.additionalFiles?.forEach((file, index) => {
+					const id = image.additionalIds?.[index];
+					if (id) photos.set(id, file);
+				});
+			}
+			for (const photo of session.extraPhotos ?? []) {
+				photos.set(photo.id, await dataUrlToFile(photo.dataUrl, photo.filename, photo.mimeType));
+			}
+			for (const [id, file] of photos) this.photoIds.set(file, id);
 
 			// Deserialize review items
 			if (session.detectedItems.length > 0) {
-				const detectedItems = await Promise.all(session.detectedItems.map(deserializeReviewItem));
+				const detectedItems = await Promise.all(
+					session.detectedItems.map((item) =>
+						deserializeReviewItem(item, photos, images[item.sourceImageIndex])
+					)
+				);
 				if (generation !== this.contextGeneration) return false;
 				this.reviewService.setDetectedItems(detectedItems);
 			}
 
 			if (session.confirmedItems.length > 0) {
 				const confirmedItems = await Promise.all(
-					session.confirmedItems.map(deserializeConfirmedItem)
+					session.confirmedItems.map((item) =>
+						deserializeConfirmedItem(item, photos, images[item.sourceImageIndex])
+					)
 				);
 				if (generation !== this.contextGeneration) return false;
 				// Restore confirmed items directly (not via confirmCurrentItem which affects navigation)
@@ -1188,6 +1485,10 @@ class ScanWorkflow {
 			this._persistedCreatedAt = session.createdAt;
 			this._persistedSessionId = session.id;
 			visionSession.restore(session.id, session.analysisRevision ?? 0);
+			if (this.serverRecovery) {
+				this.serverRevision = this.serverRecovery.revision;
+				this.acceptedPhotoIds = new Set(this.serverRecovery.photos.map((photo) => photo.id));
+			}
 
 			log.info('Session recovered successfully');
 			return true;
@@ -1196,8 +1497,7 @@ class ScanWorkflow {
 			const errorMessage = error instanceof Error ? error.message : String(error);
 			const errorName = error instanceof Error ? error.name : 'Unknown';
 			log.error(`Failed to recover session: [${errorName}] ${errorMessage}`);
-			// Clear corrupted session
-			await this.clearPersistedSession();
+			// Keep both copies for explicit recovery after a transient failure.
 			return false;
 		}
 	}
@@ -1206,14 +1506,67 @@ class ScanWorkflow {
 	 * Check if a recoverable session exists.
 	 */
 	async hasRecoverableSession(): Promise<boolean> {
-		return sessionPersistence.hasRecoverableSession();
+		let local = await sessionPersistence.load();
+		this.legacyRecovery = local;
+		try {
+			const remote = await drafts.list();
+			if (
+				local &&
+				remote.some((draft) => draft.id === local?.id && draft.state.status === 'complete')
+			) {
+				await sessionPersistence.clear();
+				local = null;
+				this.legacyRecovery = null;
+			}
+			this.serverRecoveries = remote.filter(
+				(draft) => draft.state.images?.length && draft.state.status !== 'complete'
+			);
+			this.serverRecovery = this.serverRecoveries[0] ?? null;
+			if (local && !this.serverRecovery) {
+				this.serverRecovery = await this.importLegacy(local);
+				this.serverRecoveries = [this.serverRecovery];
+			}
+		} catch (error) {
+			log.warn('Could not read or import server drafts', error);
+		}
+		return !!this.serverRecovery || !!local;
 	}
 
 	/**
 	 * Get summary of recoverable session for UI display.
 	 */
 	async getRecoverySummary(): Promise<sessionPersistence.SessionSummary | null> {
+		return this.serverRecovery
+			? this.summaryFromServer(this.serverRecovery)
+			: sessionPersistence.getSessionSummary();
+	}
+
+	async getLegacyRecoverySummary(): Promise<sessionPersistence.SessionSummary | null> {
+		if (
+			!this.serverRecovery ||
+			!this.legacyRecovery ||
+			this.serverRecoveries.some((draft) => draft.id === this.legacyRecovery?.id)
+		)
+			return null;
 		return sessionPersistence.getSessionSummary();
+	}
+
+	getServerRecoveryOptions(): { id: string; summary: sessionPersistence.SessionSummary }[] {
+		return this.serverRecoveries.map((draft) => ({
+			id: draft.id,
+			summary: this.summaryFromServer(draft),
+		}));
+	}
+
+	selectServerRecovery(id: string): void {
+		this.serverRecovery = this.serverRecoveries.find((draft) => draft.id === id) ?? null;
+	}
+
+	async recoverLegacy(): Promise<boolean> {
+		if (!this.legacyRecovery) return false;
+		this.serverRecovery = await this.importLegacy(this.legacyRecovery);
+		this.serverRecoveries.push(this.serverRecovery);
+		return this.recover();
 	}
 
 	/**
@@ -1222,6 +1575,11 @@ class ScanWorkflow {
 	async clearPersistedSession(): Promise<void> {
 		const scope = sessionPersistence.captureSessionScope();
 		if (scope) await sessionPersistence.clear(scope);
+	}
+
+	private async completeDraft(): Promise<void> {
+		await this._doPersist(true);
+		await this.clearPersistedSession();
 	}
 
 	// =========================================================================
@@ -1252,6 +1610,12 @@ class ScanWorkflow {
 		this._error = null;
 		this._persistedCreatedAt = null; // Reset for next session
 		this._persistedSessionId = null; // Reset for next session
+		this.serverRevision = null;
+		this.acceptedPhotoIds.clear();
+		this.photoIds = new WeakMap();
+		this.serverRecovery = null;
+		this.serverRecoveries = [];
+		this.legacyRecovery = null;
 		if (clearPersisted && scope) void sessionPersistence.clear(scope);
 	}
 

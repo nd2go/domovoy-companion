@@ -82,6 +82,8 @@ export interface Item extends ItemCore, ItemExtended {
 
 /** Image captured for analysis */
 export interface CapturedImage {
+	/** Stable ID of the original photo in the server draft. */
+	id?: string;
 	file: File;
 	/**
 	 * URL for displaying preview thumbnail in UI.
@@ -97,6 +99,7 @@ export interface CapturedImage {
 	extraInstructions: string;
 	/** Additional images showing the same item from different angles */
 	additionalFiles?: File[];
+	additionalIds?: string[];
 	/** Object URLs for displaying additional image previews in UI */
 	additionalDataUrls?: string[];
 	/** Custom asset ID from pre-printed QR codes */

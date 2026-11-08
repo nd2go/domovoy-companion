@@ -10,6 +10,7 @@
 	import Button from './Button.svelte';
 
 	interface Props {
+		title?: string;
 		/** Summary of the recoverable session */
 		summary: SessionSummary;
 		/** Callback when user chooses to resume the session */
@@ -20,7 +21,13 @@
 		loading?: boolean;
 	}
 
-	let { summary, onResume, onDismiss, loading = false }: Props = $props();
+	let {
+		title = 'Session Recovery Available',
+		summary,
+		onResume,
+		onDismiss,
+		loading = false,
+	}: Props = $props();
 
 	// Human-readable status
 	function getStatusText(status: string): string {
@@ -61,7 +68,7 @@
 			</div>
 
 			<div class="flex-1">
-				<h3 class="text-body font-semibold text-primary-100">Session Recovery Available</h3>
+				<h3 class="text-body font-semibold text-primary-100">{title}</h3>
 				<p class="mt-1 text-body-sm text-primary-200/80">
 					You were {getStatusText(summary.status)}
 					{#if summary.locationName}
@@ -103,7 +110,7 @@
 				{/if}
 			</Button>
 			<Button variant="ghost" onclick={onDismiss} disabled={loading}>
-				<span>Start Fresh</span>
+				<span>Keep for later</span>
 			</Button>
 		</div>
 	</div>
