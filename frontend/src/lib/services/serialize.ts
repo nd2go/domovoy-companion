@@ -40,6 +40,7 @@ export interface StoredImage {
 	additionalDataUrls?: string[];
 	additionalFilenames?: string[];
 	additionalMimeTypes?: string[];
+	additionalIds?: string[];
 	/** Custom asset ID from pre-printed QR codes */
 	assetId?: string | null;
 }
@@ -203,7 +204,7 @@ export async function serializeImage(img: CapturedImage): Promise<StoredImage> {
 	}
 
 	return {
-		id: crypto.randomUUID(),
+		id: img.id ?? crypto.randomUUID(),
 		filename: img.file.name,
 		mimeType: img.file.type || 'image/jpeg',
 		dataUrl,
@@ -212,6 +213,7 @@ export async function serializeImage(img: CapturedImage): Promise<StoredImage> {
 		additionalDataUrls,
 		additionalFilenames,
 		additionalMimeTypes,
+		additionalIds: img.additionalIds ? [...img.additionalIds] : undefined,
 		assetId: img.assetId,
 	};
 }
@@ -286,12 +288,14 @@ export async function deserializeImage(stored: StoredImage): Promise<CapturedIma
 	}
 
 	return {
+		id: stored.id,
 		file,
 		// Create fresh Object URL for display (NOT the base64 - Object URLs are more memory efficient for display)
 		dataUrl: URL.createObjectURL(file),
 		separateItems: stored.separateItems,
 		extraInstructions: stored.extraInstructions,
 		additionalFiles,
+		additionalIds: stored.additionalIds,
 		additionalDataUrls,
 		assetId: stored.assetId,
 	};

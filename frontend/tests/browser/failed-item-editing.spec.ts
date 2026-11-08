@@ -34,10 +34,83 @@ async function openSummary(
 		}, options.selectedGroupId);
 	}
 	let expired = false;
+	const draftRevisions = new Map<string, number>();
+	const savedDrafts = new Map<
+		string,
+		{
+			id: string;
+			revision: number;
+			photos: { id: string; filename: string; mime: string; size: number; checksum: string }[];
+			state: Record<string, unknown>;
+		}
+	>();
 	await page.route('**/api/**', async (route) => {
 		const request = route.request();
 		const path = new URL(request.url()).pathname;
-		if (path === '/api/llm/readiness') return route.fulfill(json({ backend: 'litellm', ready: true, model: 'test', reason: null, profile_revision: 'test', timeout_seconds: 120, max_parallelism: 30, chat_available: true }));
+		if (path === '/api/drafts' && request.method() === 'GET')
+			return route.fulfill(json([...savedDrafts.values()]));
+		if (path === '/api/drafts' && request.method() === 'POST') {
+			const id = request.postDataJSON().id as string;
+			const revision = draftRevisions.get(id) ?? 0;
+			draftRevisions.set(id, revision);
+			const draft = savedDrafts.get(id) ?? { id, revision, photos: [], state: {} };
+			savedDrafts.set(id, draft);
+			return route.fulfill(json(draft, 201));
+		}
+		if (/^\/api\/drafts\/[^/]+\/derived\/[0-9a-f]{64}$/.test(path)) {
+			if (request.method() === 'PUT')
+				return route.fulfill(json({ checksum: path.split('/').at(-1) }));
+			return route.fulfill({
+				status: 200,
+				contentType: 'image/png',
+				body: Buffer.from(
+					'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+					'base64'
+				),
+			});
+		}
+		if (/^\/api\/drafts\/[^/]+\/photos\/[^/]+\/original$/.test(path))
+			return route.fulfill({
+				status: 200,
+				contentType: 'application/octet-stream',
+				body: Buffer.from(
+					'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+					'base64'
+				),
+			});
+		const draftMatch = path.match(/^\/api\/drafts\/([^/]+)(?:\/photos\/([^/]+))?$/);
+		if (draftMatch && request.method() === 'PUT') {
+			const photo = {
+				id: draftMatch[2],
+				filename: 'item.png',
+				mime: 'image/png',
+				checksum: 'synthetic',
+				size: 67,
+			};
+			savedDrafts.get(draftMatch[1])?.photos.push(photo);
+			return route.fulfill(json(photo));
+		}
+		if (draftMatch && request.method() === 'PATCH') {
+			const revision = (draftRevisions.get(draftMatch[1]) ?? 0) + 1;
+			draftRevisions.set(draftMatch[1], revision);
+			const draft = savedDrafts.get(draftMatch[1])!;
+			draft.revision = revision;
+			draft.state = request.postDataJSON().state;
+			return route.fulfill(json(draft));
+		}
+		if (path === '/api/llm/readiness')
+			return route.fulfill(
+				json({
+					backend: 'litellm',
+					ready: true,
+					model: 'test',
+					reason: null,
+					profile_revision: 'test',
+					timeout_seconds: 120,
+					max_parallelism: 30,
+					chat_available: true,
+				})
+			);
 		options.operations?.push(`${request.method()} ${path}`);
 		if (path === '/api/config') {
 			return route.fulfill(
@@ -397,6 +470,113 @@ test('reload during a failed-item edit recovers the unchanged summary', async ({
 	await expect(page.getByText('Unsaved monitor', { exact: true })).toHaveCount(0);
 });
 
+test('server draft survives cleared IndexedDB', async ({ page }) => {
+	await openSummary(page, ['Bad lamp'], []);
+	await page.evaluate(async () => {
+		const database = await new Promise<IDBDatabase>((resolve, reject) => {
+			const request = indexedDB.open('hbc-scan-recovery');
+			request.onsuccess = () => resolve(request.result);
+			request.onerror = () => reject(request.error);
+		});
+		await new Promise<void>((resolve, reject) => {
+			const transaction = database.transaction('sessions', 'readwrite');
+			transaction.objectStore('sessions').clear();
+			transaction.oncomplete = () => resolve();
+			transaction.onerror = () => reject(transaction.error);
+		});
+		database.close();
+	});
+	await page.reload();
+	await expect(page).toHaveURL(/\/location$/);
+	await page.getByRole('button', { name: 'Resume Session' }).click();
+	await expect(page).toHaveURL(/\/summary$/);
+	await expect(page.getByText('Bad lamp', { exact: true })).toBeVisible();
+});
+
+test('browser draft migrates after server lookup has no draft', async ({ page }) => {
+	await openSummary(page, ['Bad lamp'], []);
+	await expect(page.getByRole('button', { name: 'Retry Failed Items' })).toBeVisible();
+	let migrations = 0;
+	page.on('request', (request) => {
+		if (new URL(request.url()).pathname === '/api/drafts' && request.method() === 'POST') {
+			migrations++;
+		}
+	});
+	await page.route('**/api/drafts', (route) =>
+		route.request().method() === 'GET' ? route.fulfill(json([])) : route.fallback()
+	);
+	await page.reload();
+	await expect(page.getByText('Server draft')).toBeVisible();
+	expect(migrations).toBeGreaterThan(0);
+	await page.getByRole('button', { name: 'Resume Session' }).click();
+	await expect(page).toHaveURL(/\/summary$/);
+});
+
+test('different server and browser drafts stay separate', async ({ page }) => {
+	await openSummary(page, ['Bad lamp'], []);
+	await expect(page.getByRole('button', { name: 'Retry Failed Items' })).toBeVisible();
+	const otherId = '11111111-1111-4111-8111-111111111111';
+	await page.route('**/api/drafts', (route) =>
+		route.request().method() === 'GET'
+			? route.fulfill(
+					json([
+						{
+							id: otherId,
+							revision: 1,
+							photos: [],
+							state: {
+								id: otherId,
+								status: 'capturing',
+								images: [{ id: otherId }],
+								locationName: 'Other location',
+							},
+						},
+					])
+				)
+			: route.fallback()
+	);
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Server draft' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Browser draft' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Resume Session' })).toHaveCount(2);
+});
+
+test('completed server draft does not revive an older browser copy', async ({ page }) => {
+	await openSummary(page, ['Bad lamp'], []);
+	await expect(page.getByRole('button', { name: 'Retry Failed Items' })).toBeVisible();
+	const draftId = await page.evaluate(async () => {
+		const db = await new Promise<IDBDatabase>((resolve, reject) => {
+			const open = indexedDB.open('hbc-scan-recovery');
+			open.onsuccess = () => resolve(open.result);
+			open.onerror = () => reject(open.error);
+		});
+		const id = await new Promise<string>((resolve, reject) => {
+			const request = db.transaction('sessions').objectStore('sessions').getAll();
+			request.onsuccess = () => resolve(request.result[0].id);
+			request.onerror = () => reject(request.error);
+		});
+		db.close();
+		return id;
+	});
+	await page.route('**/api/drafts', (route) =>
+		route.request().method() === 'GET'
+			? route.fulfill(
+					json([
+						{
+							id: draftId,
+							revision: 10,
+							photos: [],
+							state: { id: draftId, status: 'complete', images: [{ id: draftId }] },
+						},
+					])
+				)
+			: route.fallback()
+	);
+	await page.reload();
+	await expect(page.getByRole('heading', { name: 'Select Location' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Resume Session' })).toHaveCount(0);
+});
+
 test('native browser back cancels editing and a new scan does not reuse its index', async ({
 	page,
 }) => {
@@ -476,6 +656,7 @@ for (const identityChanged of [true, false]) {
 				})
 			)
 		);
+		await page.route('**/api/drafts', (route) => route.fulfill(json([])));
 		await page.route('**/api/groups', (route) =>
 			route.fulfill(json([{ id: 'g2', name: 'New collection' }]))
 		);

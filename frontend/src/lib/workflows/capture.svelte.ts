@@ -25,6 +25,7 @@ export class CaptureService {
 
 	/** Add a captured image */
 	addImage(image: CapturedImage): void {
+		image.id ??= crypto.randomUUID();
 		log.debug(`Adding image: file="${image.file.name}", size=${image.file.size} bytes`);
 		this.images = [image, ...this.images];
 		log.info(`Image added. Total images: ${this.images.length}`);
@@ -61,6 +62,7 @@ export class CaptureService {
 			return {
 				...img,
 				additionalFiles: [...(img.additionalFiles || []), ...files],
+				additionalIds: [...(img.additionalIds || []), ...files.map(() => crypto.randomUUID())],
 				additionalDataUrls: [...(img.additionalDataUrls || []), ...dataUrls],
 			};
 		});
@@ -81,6 +83,7 @@ export class CaptureService {
 			return {
 				...img,
 				additionalFiles: img.additionalFiles?.filter((_, j) => j !== additionalIndex),
+				additionalIds: img.additionalIds?.filter((_, j) => j !== additionalIndex),
 				additionalDataUrls: img.additionalDataUrls?.filter((_, j) => j !== additionalIndex),
 			};
 		});

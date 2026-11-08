@@ -7,7 +7,7 @@
  * Key design decisions:
  * - Uses IndexedDB (via idb library) for storage > 5MB limit of localStorage
  * - One session per verified Homebox identity and collection
- * - TTL-based cleanup: expired sessions are removed when accessed after 7 days
+ * - Browser copies remain until an explicit clear or a confirmed server migration
  * - Storage operations are called by the workflow's autosave and explicit checkpoints
  */
 
@@ -50,19 +50,6 @@ export function captureSessionScope(): SessionScope | null {
 
 function sessionKey(scope: SessionScope): string {
 	return `${scope.contextId}:${scope.groupId}`;
-}
-
-/** Session TTL in milliseconds (7 days) */
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-/**
- * Check if a session has exceeded its TTL.
- * @param session - The session to check
- * @returns true if expired, false otherwise
- */
-function isSessionExpired(session: StoredSession): boolean {
-	const age = Date.now() - session.createdAt;
-	return age > SESSION_TTL_MS;
 }
 
 // =============================================================================
@@ -151,13 +138,6 @@ export async function hasRecoverableSession(scope = captureSessionScope()): Prom
 
 		if (!session) return false;
 
-		// Check TTL expiration
-		if (isSessionExpired(session)) {
-			log.info('Session expired (TTL), clearing');
-			await clear(scope);
-			return false;
-		}
-
 		// Don't recover complete or idle sessions
 		if (session.status === 'complete' || session.status === 'idle') {
 			log.debug('Session in terminal state, not recoverable');
@@ -208,7 +188,7 @@ export async function getSessionSummary(
 
 /**
  * Load the stored session.
- * Returns null if no session exists, session is expired, or data is corrupted.
+ * Returns null if no session exists or data is corrupted.
  */
 export async function load(scope = captureSessionScope()): Promise<StoredSession | null> {
 	if (!browser) return null;
@@ -221,14 +201,6 @@ export async function load(scope = captureSessionScope()): Promise<StoredSession
 
 		if (!session) {
 			log.debug('No stored session found');
-			return null;
-		}
-
-		// Check TTL expiration
-		if (isSessionExpired(session)) {
-			const ageDays = Math.floor((Date.now() - session.createdAt) / (1000 * 60 * 60 * 24));
-			log.info(`Session expired (${ageDays} days old), clearing`);
-			await clear(scope);
 			return null;
 		}
 
@@ -257,12 +229,17 @@ export async function load(scope = captureSessionScope()): Promise<StoredSession
  * Save the current session state.
  * Overwrites the existing session for the supplied identity and collection.
  */
-export async function save(session: StoredSession, scope = captureSessionScope()): Promise<void> {
+export async function save(
+	session: StoredSession,
+	scope = captureSessionScope(),
+	strict = false
+): Promise<void> {
 	if (!browser) {
 		return;
 	}
 	if (!scope) {
 		log.warn('Refusing to persist a scan without a verified context and collection');
+		if (strict) throw new Error('Verified collection is not available');
 		return;
 	}
 
@@ -280,7 +257,7 @@ export async function save(session: StoredSession, scope = captureSessionScope()
 		const errorMessage = error instanceof Error ? error.message : String(error);
 		const errorName = error instanceof Error ? error.name : 'Unknown';
 		log.error(`Error saving session: [${errorName}] ${errorMessage}`);
-		// Don't throw - persistence failures shouldn't break the workflow
+		if (strict) throw error;
 	}
 }
 
